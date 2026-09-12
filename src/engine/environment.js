@@ -1,4 +1,4 @@
-// ===== Environment Module: Hydrothermal Vents, Photic Surface Zone & Nutrient Grid =====
+// ===== Phase 2 Environment Module: Multi-Biome, Day/Night Cycle & Pheromone Grid =====
 
 const { clamp } = require('./genome');
 
@@ -8,28 +8,28 @@ class FoodGrid {
     this.cols = Math.ceil(width / cellSize);
     this.rows = Math.ceil(height / cellSize);
     this.density = new Float32Array(this.cols * this.rows);
+    this.pheromones = new Float32Array(this.cols * this.rows); // Pheromone signal layer
     this.vents = [];
 
-    // Initialize initial primordial organic soup density
+    // Initialize nutrient density
     for (let i = 0; i < this.density.length; i++) {
       this.density[i] = 0.16 + Math.random() * 0.24;
+      this.pheromones[i] = 0;
     }
 
-    // Spawn deep-sea hydrothermal vents at the bottom/lower ocean region
+    // Abyssal hydrothermal vents
     const ventCount = 5;
     for (let i = 0; i < ventCount; i++) {
       this.vents.push({
         cx: Math.floor(Math.random() * this.cols),
-        cy: Math.floor((0.55 + Math.random() * 0.4) * this.rows),
+        cy: Math.floor((0.65 + Math.random() * 0.3) * this.rows),
         r: 3 + Math.random() * 3.5,
         heat: 0.8 + Math.random() * 0.4,
       });
     }
   }
 
-  idx(cx, cy) {
-    return cy * this.cols + cx;
-  }
+  idx(cx, cy) { return cy * this.cols + cx; }
 
   cellAt(x, y) {
     const cx = clamp(Math.floor(x / this.cellSize), 0, this.cols - 1);
@@ -37,26 +37,39 @@ class FoodGrid {
     return { cx, cy };
   }
 
-  // Sunlight penetration: higher at the top surface, decreases with depth
-  lightFactor(cy) {
-    return 0.3 + 0.7 * (1 - cy / this.rows);
+  // Get environment biome type at coordinate
+  biomeAt(x, y) {
+    const relY = y / (this.rows * this.cellSize);
+    if (relY < 0.35) return 'photic'; // Sunlit Surface
+    if (relY < 0.70) return 'pelagic'; // Open Water Drift
+    return 'abyssal'; // Deep Vents
   }
 
-  grow(growthRate = 0.011) {
-    const { cols, rows, density } = this;
+  // Diurnal Day/Night Cycle light multiplier
+  lightFactor(cy, tickCount = 0) {
+    const dayNightOscillation = 0.3 + 0.7 * Math.pow(Math.sin((tickCount * Math.PI) / 120), 2);
+    const depthFactor = 0.2 + 0.8 * (1 - cy / this.rows);
+    return dayNightOscillation * depthFactor;
+  }
 
-    // 1. Photic / Surface plant nutrient growth
+  grow(growthRate = 0.011, tickCount = 0) {
+    const { cols, rows, density, pheromones } = this;
+
+    // 1. Photic plant growth with Day/Night cycle
     for (let cy = 0; cy < rows; cy++) {
-      const light = this.lightFactor(cy);
+      const light = this.lightFactor(cy, tickCount);
       const rowBase = cy * cols;
       for (let cx = 0; cx < cols; cx++) {
         const i = rowBase + cx;
         const d = density[i];
         density[i] = clamp(d + growthRate * light * d * (1 - d) + growthRate * 0.022 * light, 0, 1);
+
+        // Pheromone decay
+        pheromones[i] *= 0.96;
       }
     }
 
-    // 2. Hydrothermal vent chemosynthesis (independent of light)
+    // 2. Hydrothermal vent chemosynthesis
     for (const vent of this.vents) {
       for (let dy = -vent.r; dy <= vent.r; dy++) {
         for (let dx = -vent.r; dx <= vent.r; dx++) {
@@ -64,14 +77,14 @@ class FoodGrid {
           if (cx < 0 || cy < 0 || cx >= cols || cy >= rows) continue;
           if (dx * dx + dy * dy > vent.r * vent.r) continue;
           const i = this.idx(cx, cy);
-          if (density[i] < 0.65) {
-            density[i] = Math.min(0.65, density[i] + 0.035 * vent.heat);
+          if (density[i] < 0.68) {
+            density[i] = Math.min(0.68, density[i] + 0.038 * vent.heat);
           }
         }
       }
     }
 
-    // 3. Fluid diffusion of nutrients across adjacent cells
+    // 3. Fluid nutrient diffusion
     const samples = Math.floor(cols * rows * 0.05);
     for (let s = 0; s < samples; s++) {
       const cx = (Math.random() * cols) | 0;
@@ -103,6 +116,17 @@ class FoodGrid {
     const { cx, cy } = this.cellAt(x, y);
     const i = this.idx(cx, cy);
     this.density[i] = Math.min(1, this.density[i] + amount);
+  }
+
+  depositPheromone(x, y, amount) {
+    const { cx, cy } = this.cellAt(x, y);
+    const i = this.idx(cx, cy);
+    this.pheromones[i] = Math.min(1.0, this.pheromones[i] + amount);
+  }
+
+  pheromoneAt(x, y) {
+    const { cx, cy } = this.cellAt(x, y);
+    return this.pheromones[this.idx(cx, cy)];
   }
 
   coverage() {

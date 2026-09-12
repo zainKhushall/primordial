@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
-<title>Primordial — Early Earth Neural Evolution Observatory</title>
+<title>Primordial Phase 2 — Early Earth Neural Observatory</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -13,7 +13,7 @@
   <div class="topbar">
     <div class="brand">
       <h1>Primordial Sea</h1>
-      <span class="badge">Neural v2.0</span>
+      <span class="badge phase2">Phase 2 RNN</span>
       <span class="tick-label" id="dayLabel">Day 0 · Generation 1</span>
     </div>
     <div class="controls">
@@ -25,6 +25,8 @@
         <button class="btn" data-speed="8">8×</button>
         <button class="btn" data-speed="16">MAX</button>
       </div>
+      <button class="btn" id="followBtn">Follow Cell: OFF</button>
+      <button class="btn cyan" id="cladeBtn">Phylogenetic Tree</button>
       <button class="btn" id="resetCamBtn">Reset view</button>
       <button class="btn warn" id="resetBtn">Restart ocean</button>
     </div>
@@ -34,16 +36,36 @@
   <div class="main">
     <div class="stage" id="stage">
       <canvas id="sea"></canvas>
-      <div class="select-hint">Click any organism to inspect its brain, genes & neural activations · Scroll to zoom, drag to pan</div>
+
+      <!-- Hover Creature Tooltip -->
+      <div class="creature-tooltip" id="creatureTooltip">
+        <div class="title" id="ttTitle">Species Name</div>
+        <div id="ttInfo">Role · Age</div>
+        <div class="bar-outer"><div class="bar-inner" id="ttEnergyBar"></div></div>
+      </div>
+
+      <!-- Floating Mini-Map Radar -->
+      <div class="minimap-container" id="minimapContainer">
+        <canvas id="minimapCanvas" width="150" height="100"></canvas>
+      </div>
+
+      <div class="select-hint">Click organism to follow & inspect brain · Scroll to zoom, drag to pan</div>
+      <div class="day-night-indicator" id="dayNightBadge">Photic Sunlit Zone · Day</div>
 
       <!-- Intro overlay -->
       <div class="overlay" id="introOverlay">
         <div class="card">
-          <h2>An early ocean, seen through a neural lens</h2>
-          <p>Over sixty unicellular organisms drift in a shallow primordial ocean. Green nutrient soup spreads across the upper photic zone, while deep-sea hydrothermal vents feed chemosynthetic life from below.</p>
-          <p>Each organism possesses an evolvable <strong>Mini Neural Network Brain</strong> mapping sensory inputs (food, prey, predators, kin, energy) directly to motor thrust, predation attacks, and colony adhesion. Brain weights and physical genes evolve across generations through <strong>asexual mitosis</strong>, <strong>sexual crossover</strong>, and <strong>local adaptive learning</strong>.</p>
-          <p>Organisms can form sticky colonies and transition into <strong>specialized multicellular creatures</strong> (feeders, defenders, reproducers, navigators). Click any organism to inspect its real-time neural network wiring diagrams, edit its genome, or trigger environmental disasters.</p>
-          <button class="btn primary" id="beginBtn">Begin observing</button>
+          <h2>Phase 2: Recurrent Brain Memory & Physical Morphologies</h2>
+          <p>Welcome to Phase 2 of the Primordial ocean observatory! Life has evolved to possess <strong>Recurrent Neural Network (RNN) Memory</strong>, short-term spatial feedback nodes, and chemical <strong>Pheromone communication</strong>.</p>
+          <p>Organisms in colonies now form cohesive <strong>spring-joint physics bodies</strong> with specialized cell morphotypes:
+            <br>• <strong>Dermal Shield</strong>: Heavy armor membrane.
+            <br>• <strong>Flagellar Motor</strong>: Propulsion swimming thrust.
+            <br>• <strong>Digestive Stomach</strong>: Rapid nutrient absorption.
+            <br>• <strong>Ocellus Eye</strong>: Extended forward vision.
+            <br>• <strong>Germ Core</strong>: Core reproductive cell.
+          </p>
+          <p>Explore multi-biome depths (Photic Surface, Pelagic Drift, Abyssal Vents), trace speciation in the <strong>Phylogenetic Clade Tree</strong>, or lock onto creatures using <strong>Camera Follow Mode</strong>.</p>
+          <button class="btn primary" id="beginBtn">Begin Phase 2 observation</button>
         </div>
       </div>
     </div>
@@ -57,16 +79,16 @@
         <p class="hint">Population history, sampled over recent simulation ticks.</p>
       </div>
 
-      <!-- Neural Network Brain Visualizer -->
+      <!-- Recurrent Neural Network (RNN) Brain Visualizer -->
       <div class="panel" id="brainPanel">
-        <h2>Brain Inspector <span class="sub-tag" id="brainTargetLabel">No cell selected</span></h2>
-        <canvas id="brainCanvas" width="290" height="150"></canvas>
+        <h2>RNN Brain Inspector <span class="sub-tag" id="brainTargetLabel">No cell selected</span></h2>
+        <canvas id="brainCanvas" width="290" height="180"></canvas>
         <div class="brain-actions" id="brainActions" style="display:none; margin-top:8px;">
           <div class="row-btns">
             <button class="btn warn" id="resetBrainBtn">Reset neural weights</button>
             <button class="btn" id="pruneBrainBtn">Prune weak synapses</button>
           </div>
-          <p class="hint">Blue synapses indicate positive excitation weights; red indicates inhibition. Node glow represents live activation.</p>
+          <p class="hint">Includes 2 internal recurrent memory feedback nodes (Mem1 & Mem2). Blue = positive excitation, Red = negative inhibition.</p>
         </div>
       </div>
 
@@ -76,7 +98,8 @@
           <button class="btn danger" id="extinctionBtn">Trigger mass extinction</button>
           <button class="btn" id="bloomBtn">Trigger nutrient bloom</button>
           <button class="btn" id="stormBtn">Trigger mutation storm</button>
-          <button class="btn warn" id="surgeBtn">Trigger thermal vent surge</button>
+          <button class="btn warn" id="surgeBtn">Trigger vent surge</button>
+          <button class="btn cyan" id="pheroBurstBtn">Release pheromone plume</button>
         </div>
         <div class="event-log" id="eventLog"></div>
       </div>
@@ -99,7 +122,7 @@
           <label>Sexual mating ratio <span class="val" id="sexVal"></span></label>
           <input type="range" id="sexSlider" min="0.0" max="0.8" step="0.05">
         </div>
-        <p class="hint">Higher temperature increases basal metabolic energy burn.</p>
+        <p class="hint">Depth biomes alter currents, light penetration & metabolic costs.</p>
       </div>
 
       <div class="panel" id="inspectorPanel">
@@ -114,13 +137,26 @@
           <div class="item"><span class="swatch" style="border-radius:50%;background:#8fae5e;opacity:.7"></span>Cell radius scales with size gene</div>
           <div class="item"><span class="swatch" style="background:linear-gradient(90deg,rgba(150,180,90,.15),rgba(150,180,90,.9))"></span>Green haze: organic nutrient soup</div>
           <div class="item"><span class="swatch" style="border-radius:50%;background:rgba(226,98,43,0.7)"></span>Hydrothermal vents feed deep-sea chemosynthesis</div>
-          <div class="item"><span class="swatch" style="border:1px solid var(--ember-dim);background:transparent"></span>Connective filaments join colony cells; glowing halo indicates multicellular organization</div>
+          <div class="item"><span class="swatch" style="border:1px solid var(--ember-dim);background:transparent"></span>Spring filaments join multicellular bodies; glowing halo marks complex organisms</div>
         </div>
       </div>
 
     </div>
   </div>
 
+</div>
+
+<!-- Phylogenetic Clade Tree Modal -->
+<div class="modal-backdrop" id="cladeModal" style="display:none;">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>Phylogenetic Clade Tree</h2>
+      <button class="btn-close" id="closeCladeModal">&times;</button>
+    </div>
+    <div class="modal-body" id="cladeTreeBody">
+      <div id="cladeGraph"></div>
+    </div>
+  </div>
 </div>
 
 <!-- Client App Script -->

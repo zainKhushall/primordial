@@ -1,4 +1,4 @@
-// ===== Organism Module: Single-Cell & Multicellular Organism Implementation =====
+// ===== Phase 2 Organism Module: RNN Perception, Spring Physics & Specialized Morphotypes =====
 
 const { NeuralNetwork } = require('./brain');
 const { clamp, lerp, dist2, hueDiff } = require('./genome');
@@ -6,7 +6,7 @@ const { clamp, lerp, dist2, hueDiff } = require('./genome');
 let ORG_ID_COUNTER = 1;
 
 class Organism {
-  constructor(x, y, genome, energy, generation, lineageId, brain) {
+  constructor(x, y, genome, energy, generation, lineageId, brain, parentId) {
     this.id = ORG_ID_COUNTER++;
     this.x = x;
     this.y = y;
@@ -20,11 +20,12 @@ class Organism {
     this.age = 0;
     this.generation = generation || 1;
     this.lineageId = lineageId || this.id;
+    this.parentId = parentId || 0;
     this.reproCooldown = 0;
     this.alive = true;
 
-    // Brain neural network initialization or inherit
-    this.brain = brain ? brain.clone() : new NeuralNetwork(8, 6, 4);
+    // Phase 2 RNN Neural Network Brain (10 inputs, 8 hidden, 6 outputs)
+    this.brain = brain ? brain.clone() : new NeuralNetwork(10, 8, 6);
 
     // Colony & Multicellular state
     this.colonySize = 1;
@@ -32,80 +33,86 @@ class Organism {
     this.colonyGroupId = 0;
     this.centroidX = x;
     this.centroidY = y;
-    this.role = 'unicellular'; // 'unicellular', 'feeder', 'defender', 'reproducer', 'navigator'
+    this.bondedPartners = []; // Spring-joint neighbor references
+    this.role = 'unicellular'; // 'unicellular', 'shield', 'motor', 'digestor', 'ocellus', 'germ'
 
-    // Statistics
+    // Telemetry & Statistics
     this.kills = 0;
     this.offspringCount = 0;
-
-    // Internal wander state for backup
     this._wanderAngle = Math.random() * Math.PI * 2;
   }
 
   get maxSpeed() {
-    return clamp(this.genome.speed / Math.sqrt(this.genome.size), 0.2, 3.4);
-  }
-  get eatRate() {
-    let rate = 0.016 + this.genome.size * 0.012;
-    if (this.role === 'feeder') rate *= 1.4;
-    return rate;
-  }
-  get metabolismBase() {
-    let base = 0.01 + Math.pow(this.genome.size, 1.65) * 0.013;
-    base *= (1.1 - this.genome.membrane * 0.25); // membrane reduces basal waste
-    if (this.role === 'reproducer') base *= 0.85;
-    return base;
-  }
-  get lifespan() {
-    return 520 + this.genome.size * 280;
-  }
-  get reproduceThreshold() {
-    let factor = 0.72;
-    if (this.role === 'reproducer') factor = 0.58;
-    return this.maxEnergy * factor;
-  }
-  get captureRadius() {
-    return 3.8 + this.genome.size * 3.4;
-  }
-  get effectiveSize() {
-    return this.genome.size * this.colonySize;
+    let speed = clamp(this.genome.speed / Math.sqrt(this.genome.size), 0.2, 3.4);
+    if (this.role === 'motor') speed *= 1.4;
+    return speed;
   }
 
-  // Determine cell role within a multicellular cluster based on position & genes
+  get eatRate() {
+    let rate = 0.016 + this.genome.size * 0.012;
+    if (this.role === 'digestor') rate *= 1.5;
+    return rate;
+  }
+
+  get metabolismBase() {
+    let base = 0.01 + Math.pow(this.genome.size, 1.65) * 0.013;
+    base *= (1.1 - this.genome.membrane * 0.25);
+    if (this.role === 'shield') base *= 1.15;
+    if (this.role === 'germ') base *= 0.82;
+    return base;
+  }
+
+  get lifespan() { return 520 + this.genome.size * 280; }
+
+  get reproduceThreshold() {
+    let factor = 0.72;
+    if (this.role === 'germ') factor = 0.55;
+    return this.maxEnergy * factor;
+  }
+
+  get captureRadius() { return 3.8 + this.genome.size * 3.4; }
+
+  get effectiveSize() { return this.genome.size * this.colonySize; }
+
+  // Assign specialized physical cell morphotype within multicellular cluster
   updateRole(clusterMembers) {
     if (!clusterMembers || clusterMembers.length < 2) {
       this.role = 'unicellular';
+      this.bondedPartners = [];
       return;
     }
-    // Calculate distance to centroid
     const dToCenter = Math.sqrt(dist2(this.x, this.y, this.centroidX, this.centroidY));
     const g = this.genome;
 
-    if (dToCenter < 12 && g.colony > 0.5) {
-      this.role = 'reproducer';
-    } else if (g.aggression > 0.4 || g.diet > 0.35) {
-      this.role = 'defender';
-    } else if (g.speed > 1.4) {
-      this.role = 'navigator';
+    if (dToCenter < 10 && g.colony > 0.5) {
+      this.role = 'germ'; // Core reproductive cell
+    } else if (g.membrane > 0.65 || g.size > 2.0) {
+      this.role = 'shield'; // Outer armor shell
+    } else if (g.speed > 1.5) {
+      this.role = 'motor'; // Flagellar motor cell
+    } else if (g.sense > 100) {
+      this.role = 'ocellus'; // Eye spot sensor cell
     } else {
-      this.role = 'feeder';
+      this.role = 'digestor'; // Internal digestive stomach cell
     }
+
+    // Maintain spring-joint links to nearby cluster partners
+    this.bondedPartners = clusterMembers.filter(m => m !== this && dist2(this.x, this.y, m.x, m.y) < 26 * 26);
   }
 
-  // Gather sensory environment inputs for neural network
+  // Gather 8 external sensory inputs for neural network
   perceive(foodGrid, spatialHash, W, H) {
-    const senseR = this.genome.sense;
+    let senseR = this.genome.sense;
+    if (this.role === 'ocellus') senseR *= 1.6;
     const senseR2 = senseR * senseR;
 
     // 1. Food sensor
     const bestFoodCell = foodGrid.bestCellNear(this.x, this.y, senseR);
     let foodDx = 0, foodDy = 0;
     if (bestFoodCell) {
-      const fdx = bestFoodCell.x - this.x;
-      const fdy = bestFoodCell.y - this.y;
+      const fdx = bestFoodCell.x - this.x, fdy = bestFoodCell.y - this.y;
       const fdist = Math.sqrt(fdx * fdx + fdy * fdy) || 1;
-      foodDx = fdx / fdist;
-      foodDy = fdy / fdist;
+      foodDx = fdx / fdist; foodDy = fdy / fdist;
     }
 
     // 2. Creature sensors
@@ -114,7 +121,8 @@ class Organism {
     let threat = null, threatD2 = Infinity;
     let kinSumX = 0, kinSumY = 0, kinCount = 0;
 
-    for (const other of neighbors) {
+    for (let i = 0; i < neighbors.length; i++) {
+      const other = neighbors[i];
       if (other === this || !other.alive) continue;
       const d2 = dist2(this.x, this.y, other.x, other.y);
       if (d2 > senseR2) continue;
@@ -124,9 +132,7 @@ class Organism {
       const selfEff = this.effectiveSize;
 
       if (sameLineage) {
-        kinSumX += other.x;
-        kinSumY += other.y;
-        kinCount++;
+        kinSumX += other.x; kinSumY += other.y; kinCount++;
       } else {
         if (otherEff > selfEff * 1.12 && (other.genome.aggression > 0.25 || other.genome.diet > 0.2)) {
           if (d2 < threatD2) { threatD2 = d2; threat = other; }
@@ -160,74 +166,112 @@ class Organism {
     }
 
     const energyRatio = clamp(this.energy / this.maxEnergy, 0, 1);
-    const speedRatio = clamp(Math.sqrt(this.vx * this.vx + this.vy * this.vy) / this.maxSpeed, 0, 1);
 
     return [foodDx, foodDy, preyDx, preyDy, threatDx, threatDy, kinDx, kinDy];
   }
 
-  // Update position and evaluate neural network actions
+  // Update physical spring forces, neural actuation & position
   step(foodGrid, spatialHash, W, H, tempFactor = 1.0) {
     if (!this.alive) return;
 
-    // 1. Neural Network Forward Pass
-    const inputs = this.perceive(foodGrid, spatialHash, W, H);
-    const outputs = this.brain.forward(inputs);
+    // 1. Recurrent Neural Network (RNN) Forward Pass
+    const envInputs = this.perceive(foodGrid, spatialHash, W, H);
+    const outputs = this.brain.forward(envInputs);
 
-    const brainMoveX = outputs[0];
-    const brainMoveY = outputs[1];
+    let dirX = outputs[0], dirY = outputs[1];
     const attackImpulse = outputs[2];
     const colonyImpulse = outputs[3];
 
-    // Combine brain steering vector with wandering noise if brain outputs are near 0
-    let dirX = brainMoveX;
-    let dirY = brainMoveY;
+    // Combine brain steering vector with wandering noise
     const mag = Math.sqrt(dirX * dirX + dirY * dirY);
-
     if (mag < 0.1) {
       this._wanderAngle += (Math.random() - 0.5) * 0.8;
-      dirX = Math.cos(this._wanderAngle);
-      dirY = Math.sin(this._wanderAngle);
+      dirX = Math.cos(this._wanderAngle); dirY = Math.sin(this._wanderAngle);
     } else {
-      dirX /= mag;
-      dirY /= mag;
+      dirX /= mag; dirY /= mag;
     }
 
-    // Adjust velocity
     const targetVx = dirX * this.maxSpeed;
     const targetVy = dirY * this.maxSpeed;
     this.vx = lerp(this.vx, targetVx, 0.32);
     this.vy = lerp(this.vy, targetVy, 0.32);
 
-    // Toroidal world wrapping
+    // 2. Multicellular Spring-Damper Physical Joint Forces
+    const REST_LENGTH = 14;
+    const STIFFNESS = 0.08;
+    const DAMPING = 0.04;
+
+    for (let i = 0; i < this.bondedPartners.length; i++) {
+      const partner = this.bondedPartners[i];
+      if (!partner.alive) continue;
+
+      const dx = partner.x - this.x;
+      const dy = partner.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+      const delta = dist - REST_LENGTH;
+
+      // Hooke's Law Spring force
+      const springF = delta * STIFFNESS;
+      const nx = dx / dist;
+      const ny = dy / dist;
+
+      // Relative velocity damping
+      const relVx = partner.vx - this.vx;
+      const relVy = partner.vy - this.vy;
+      const dampF = (relVx * nx + relVy * ny) * DAMPING;
+
+      const totalF = springF + dampF;
+      this.vx += nx * totalF;
+      this.vy += ny * totalF;
+
+      // Shared Energy distribution in digestor cells
+      if (this.role === 'digestor' && this.energy > this.maxEnergy * 0.6 && partner.energy < partner.maxEnergy * 0.5) {
+        const transfer = 0.12;
+        this.energy -= transfer;
+        partner.energy += transfer;
+      }
+    }
+
+    // Biome Ocean Current Forces (Pelagic Drift Zone)
+    const biome = foodGrid.biomeAt(this.x, this.y);
+    if (biome === 'pelagic') {
+      this.vx += Math.sin(this.y * 0.01) * 0.08;
+    }
+
+    // Update Position
     this.x = (this.x + this.vx + W) % W;
     this.y = (this.y + this.vy + H) % H;
 
-    // 2. Feeding from environment (herbivory/photosynthesis)
+    // 3. Pheromone Signal Emission
+    if (this.genome.pheromoneRate > 0.2 && Math.random() < this.genome.pheromoneRate * 0.4) {
+      foodGrid.depositPheromone(this.x, this.y, 0.18 * this.genome.pheromoneRate);
+    }
+
+    // 4. Feeding from environment
     if (this.energy < this.maxEnergy * 0.98) {
       const eaten = foodGrid.eat(this.x, this.y, this.eatRate);
       if (eaten > 0) {
         const plantEff = 1 - this.genome.diet * 0.42;
-        const energyGain = eaten * 44 * plantEff;
-        this.energy = Math.min(this.maxEnergy, this.energy + energyGain);
-        // Plasticity reinforcement for eating food
+        this.energy = Math.min(this.maxEnergy, this.energy + eaten * 44 * plantEff);
         this.brain.adaptPlasticity(0.08, this.genome.plasticity);
       }
     }
 
-    // 3. Predation (carnivory) if attack impulse activated or aggressive
+    // 5. Predation (Carnivory Attack)
     if (attackImpulse > 0.35 && this.genome.diet > 0.12 && this.energy < this.maxEnergy * 0.95) {
-      const senseR = this.genome.sense;
       const neighbors = spatialHash.query(this.x, this.y, this.captureRadius * 1.5);
-      for (const other of neighbors) {
+      for (let i = 0; i < neighbors.length; i++) {
+        const other = neighbors[i];
         if (other === this || !other.alive) continue;
         const d2 = dist2(this.x, this.y, other.x, other.y);
         if (d2 <= this.captureRadius * this.captureRadius) {
           const sameLineage = hueDiff(this.genome.hue, other.genome.hue) < 12;
           if (!sameLineage && other.effectiveSize * 1.08 < this.effectiveSize) {
-            // Predation roll
-            const selfPower = this.genome.aggression * 0.4 + (this.effectiveSize - other.effectiveSize) * 0.06;
-            const defenderPower = other.genome.membrane * 0.35 + other.genome.aggression * 0.15;
-            const successP = clamp(0.44 + selfPower - defenderPower, 0.08, 0.92);
+            let selfPower = this.genome.aggression * 0.4 + (this.effectiveSize - other.effectiveSize) * 0.06;
+            let defenderPower = other.genome.membrane * 0.35 + other.genome.aggression * 0.15;
+            if (other.role === 'shield') defenderPower *= 1.8;
+
+            const successP = clamp(0.44 + selfPower - defenderPower, 0.05, 0.92);
 
             if (Math.random() < successP) {
               const meatGain = other.energy * 0.65 * clamp(0.35 + this.genome.diet * 0.85, 0.35, 1.0);
@@ -235,7 +279,6 @@ class Organism {
               other.alive = false;
               this.kills++;
               foodGrid.deposit(other.x, other.y, 0.14 * other.genome.size);
-              // Plasticity reinforcement for successful hunt
               this.brain.adaptPlasticity(0.4, this.genome.plasticity);
             }
           }
@@ -243,7 +286,7 @@ class Organism {
       }
     }
 
-    // 4. Metabolism cost
+    // 6. Metabolism cost
     const speedUsed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
     const cost = (this.metabolismBase + speedUsed * 0.032) * tempFactor;
     this.energy -= cost;

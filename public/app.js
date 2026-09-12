@@ -1,8 +1,4 @@
-// ===== Client Observer App: Simulation Renderer & Interactive Dashboard =====
-
-// =====================================================================
-// SIMULATION ENGINE (Client Bundle)
-// =====================================================================
+// ===== Phase 2 Client Observer App: Enhanced Bioluminescent Visuals & Interactive HUD =====
 
 const GENE_RANGES = {
   size: [0.4, 3.2],
@@ -13,6 +9,7 @@ const GENE_RANGES = {
   colony: [0, 1],
   membrane: [0.2, 1.0],
   plasticity: [0, 1],
+  pheromoneRate: [0, 1],
   mutationRate: [0.02, 0.35],
 };
 
@@ -25,6 +22,7 @@ const GENE_LABELS = {
   colony: 'Colony Adhesion',
   membrane: 'Membrane Shield',
   plasticity: 'Brain Plasticity',
+  pheromoneRate: 'Pheromone Signal',
   mutationRate: 'Genetic Instability',
 };
 
@@ -39,6 +37,21 @@ function gaussian() {
 function dist2(ax, ay, bx, by) { const dx = ax - bx, dy = ay - by; return dx * dx + dy * dy; }
 function hueDiff(a, b) { let d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; }
 
+function generateSpeciesName(genome) {
+  const prefixes = ['Phyto', 'Micro', 'Velox', 'Macro', 'Colonio', 'Carnis', 'Abysso', 'Pelag', 'Soma', 'Bio'];
+  const suffixes = ['morphic', 'bion', 'vorus', 'dermal', 'spire', 'plax', 'cyte', 'naut', 'stoma', 'troph'];
+
+  let pIndex = 0;
+  if (genome.diet > 0.4) pIndex = 5;
+  else if (genome.colony > 0.5) pIndex = 4;
+  else if (genome.speed > 1.6) pIndex = 2;
+  else if (genome.size > 2.0) pIndex = 3;
+  else pIndex = 0;
+
+  let sIndex = Math.floor((genome.hue / 360) * suffixes.length) % suffixes.length;
+  return `${prefixes[pIndex]}-${suffixes[sIndex]}`;
+}
+
 function randomGenome(base) {
   const g = {};
   for (const k in GENE_RANGES) {
@@ -46,6 +59,7 @@ function randomGenome(base) {
     g[k] = base && base[k] !== undefined ? base[k] : lerp(lo, hi, Math.random());
   }
   g.hue = base && base.hue !== undefined ? base.hue : Math.random() * 360;
+  g.speciesName = generateSpeciesName(g);
   return g;
 }
 
@@ -59,7 +73,10 @@ function mutateGenome(genome, mutRate) {
     if (Math.random() < 0.05) delta *= 3.5;
     g[k] = clamp(g[k] + delta, lo, hi);
   }
+  const oldHue = g.hue;
   g.hue = (g.hue + gaussian() * rate * 35 + 360) % 360;
+  if (Math.abs(g.hue - oldHue) > 30 || Math.random() < 0.08) g.speciesName = generateSpeciesName(g);
+  else g.speciesName = genome.speciesName || generateSpeciesName(g);
   return g;
 }
 
@@ -73,12 +90,13 @@ function crossoverGenome(parentA, parentB, mutRate) {
   child.hue = Math.random() < 0.5 ? parentA.hue : parentB.hue;
   if (Math.abs(parentA.hue - parentB.hue) < 40) child.hue = lerp(parentA.hue, parentB.hue, 0.5);
   const effectiveMutRate = mutRate !== undefined ? mutRate : (parentA.mutationRate + parentB.mutationRate) * 0.5;
+  child.speciesName = generateSpeciesName(child);
   return mutateGenome(child, effectiveMutRate);
 }
 
-// Neural Network Brain
+// Recurrent Neural Network (RNN) Engine
 class NeuralNetwork {
-  constructor(inputSize = 8, hiddenSize = 6, outputSize = 4) {
+  constructor(inputSize = 10, hiddenSize = 8, outputSize = 6) {
     this.inputSize = inputSize;
     this.hiddenSize = hiddenSize;
     this.outputSize = outputSize;
@@ -92,6 +110,8 @@ class NeuralNetwork {
     this.hidden = new Float32Array(hiddenSize);
     this.outputs = new Float32Array(outputSize);
 
+    this.mem1 = 0;
+    this.mem2 = 0;
     this.randomize();
   }
 
@@ -102,8 +122,10 @@ class NeuralNetwork {
     for (let i = 0; i < this.B2.length; i++) this.B2[i] = gaussian() * 0.2;
   }
 
-  forward(inputArray) {
-    for (let i = 0; i < this.inputSize; i++) this.inputs[i] = inputArray[i] || 0;
+  forward(environmentInputs) {
+    for (let i = 0; i < 8; i++) this.inputs[i] = environmentInputs[i] || 0;
+    this.inputs[8] = this.mem1;
+    this.inputs[9] = this.mem2;
 
     for (let h = 0; h < this.hiddenSize; h++) {
       let sum = this.B1[h];
@@ -116,8 +138,11 @@ class NeuralNetwork {
       let sum = this.B2[o];
       const rowOffset = o * this.hiddenSize;
       for (let h = 0; h < this.hiddenSize; h++) sum += this.W2[rowOffset + h] * this.hidden[h];
-      this.outputs[o] = o < 2 ? Math.tanh(sum) : (1 / (1 + Math.exp(-sum)));
+      this.outputs[o] = (o < 2 || o >= 4) ? Math.tanh(sum) : (1 / (1 + Math.exp(-sum)));
     }
+
+    this.mem1 = this.outputs[4];
+    this.mem2 = this.outputs[5];
     return this.outputs;
   }
 
@@ -168,29 +193,34 @@ class NeuralNetwork {
   clone() {
     const n = new NeuralNetwork(this.inputSize, this.hiddenSize, this.outputSize);
     n.W1.set(this.W1); n.B1.set(this.B1); n.W2.set(this.W2); n.B2.set(this.B2);
+    n.mem1 = this.mem1; n.mem2 = this.mem2;
     return n;
   }
-  reset() { this.randomize(0.9); }
+  reset() { this.randomize(0.9); this.mem1 = 0; this.mem2 = 0; }
   prune(threshold = 0.08) {
     for (let i = 0; i < this.W1.length; i++) if (Math.abs(this.W1[i]) < threshold) this.W1[i] = 0;
     for (let i = 0; i < this.W2.length; i++) if (Math.abs(this.W2[i]) < threshold) this.W2[i] = 0;
   }
 }
 
-// Food Grid
+// Food & Pheromone Grid
 class FoodGrid {
   constructor(width, height, cellSize = 20) {
     this.cellSize = cellSize;
     this.cols = Math.ceil(width / cellSize);
     this.rows = Math.ceil(height / cellSize);
     this.density = new Float32Array(this.cols * this.rows);
+    this.pheromones = new Float32Array(this.cols * this.rows);
     this.vents = [];
-    for (let i = 0; i < this.density.length; i++) this.density[i] = 0.16 + Math.random() * 0.24;
+    for (let i = 0; i < this.density.length; i++) {
+      this.density[i] = 0.16 + Math.random() * 0.24;
+      this.pheromones[i] = 0;
+    }
     const ventCount = 5;
     for (let i = 0; i < ventCount; i++) {
       this.vents.push({
         cx: Math.floor(Math.random() * this.cols),
-        cy: Math.floor((0.55 + Math.random() * 0.4) * this.rows),
+        cy: Math.floor((0.65 + Math.random() * 0.3) * this.rows),
         r: 3 + Math.random() * 3.5,
         heat: 0.8 + Math.random() * 0.4,
       });
@@ -202,16 +232,27 @@ class FoodGrid {
     const cy = clamp(Math.floor(y / this.cellSize), 0, this.rows - 1);
     return { cx, cy };
   }
-  lightFactor(cy) { return 0.3 + 0.7 * (1 - cy / this.rows); }
-  grow(growthRate = 0.011) {
-    const { cols, rows, density } = this;
+  biomeAt(x, y) {
+    const relY = y / (this.rows * this.cellSize);
+    if (relY < 0.35) return 'photic';
+    if (relY < 0.70) return 'pelagic';
+    return 'abyssal';
+  }
+  lightFactor(cy, tickCount = 0) {
+    const dayNightOscillation = 0.3 + 0.7 * Math.pow(Math.sin((tickCount * Math.PI) / 120), 2);
+    const depthFactor = 0.2 + 0.8 * (1 - cy / this.rows);
+    return dayNightOscillation * depthFactor;
+  }
+  grow(growthRate = 0.011, tickCount = 0) {
+    const { cols, rows, density, pheromones } = this;
     for (let cy = 0; cy < rows; cy++) {
-      const light = this.lightFactor(cy);
+      const light = this.lightFactor(cy, tickCount);
       const rowBase = cy * cols;
       for (let cx = 0; cx < cols; cx++) {
         const i = rowBase + cx;
         const d = density[i];
         density[i] = clamp(d + growthRate * light * d * (1 - d) + growthRate * 0.022 * light, 0, 1);
+        pheromones[i] *= 0.96;
       }
     }
     for (const vent of this.vents) {
@@ -221,7 +262,7 @@ class FoodGrid {
           if (cx < 0 || cy < 0 || cx >= cols || cy >= rows) continue;
           if (dx * dx + dy * dy > vent.r * vent.r) continue;
           const i = this.idx(cx, cy);
-          if (density[i] < 0.65) density[i] = Math.min(0.65, density[i] + 0.035 * vent.heat);
+          if (density[i] < 0.68) density[i] = Math.min(0.68, density[i] + 0.038 * vent.heat);
         }
       }
     }
@@ -254,6 +295,11 @@ class FoodGrid {
     const { cx, cy } = this.cellAt(x, y);
     const i = this.idx(cx, cy);
     this.density[i] = Math.min(1, this.density[i] + amount);
+  }
+  depositPheromone(x, y, amount) {
+    const { cx, cy } = this.cellAt(x, y);
+    const i = this.idx(cx, cy);
+    this.pheromones[i] = Math.min(1.0, this.pheromones[i] + amount);
   }
   coverage() {
     let sum = 0;
@@ -309,10 +355,10 @@ class SpatialHash {
   }
 }
 
-// Organism
+// Organism with Spring Physics & Morphotypes
 let ORG_ID_COUNTER = 1;
 class Organism {
-  constructor(x, y, genome, energy, generation, lineageId, brain) {
+  constructor(x, y, genome, energy, generation, lineageId, brain, parentId) {
     this.id = ORG_ID_COUNTER++;
     this.x = x; this.y = y;
     this.vx = 0; this.vy = 0;
@@ -322,15 +368,17 @@ class Organism {
     this.age = 0;
     this.generation = generation || 1;
     this.lineageId = lineageId || this.id;
+    this.parentId = parentId || 0;
     this.reproCooldown = 0;
     this.alive = true;
 
-    this.brain = brain ? brain.clone() : new NeuralNetwork(8, 6, 4);
+    this.brain = brain ? brain.clone() : new NeuralNetwork(10, 8, 6);
 
     this.colonySize = 1;
     this.colonyMemberCount = 1;
     this.colonyGroupId = 0;
     this.centroidX = x; this.centroidY = y;
+    this.bondedPartners = [];
     this.role = 'unicellular';
 
     this.kills = 0;
@@ -338,39 +386,53 @@ class Organism {
     this._wanderAngle = Math.random() * Math.PI * 2;
   }
 
-  get maxSpeed() { return clamp(this.genome.speed / Math.sqrt(this.genome.size), 0.2, 3.4); }
+  get maxSpeed() {
+    let speed = clamp(this.genome.speed / Math.sqrt(this.genome.size), 0.2, 3.4);
+    if (this.role === 'motor') speed *= 1.4;
+    return speed;
+  }
   get eatRate() {
     let rate = 0.016 + this.genome.size * 0.012;
-    if (this.role === 'feeder') rate *= 1.4;
+    if (this.role === 'digestor') rate *= 1.5;
     return rate;
   }
   get metabolismBase() {
     let base = 0.01 + Math.pow(this.genome.size, 1.65) * 0.013;
     base *= (1.1 - this.genome.membrane * 0.25);
-    if (this.role === 'reproducer') base *= 0.85;
+    if (this.role === 'shield') base *= 1.15;
+    if (this.role === 'germ') base *= 0.82;
     return base;
   }
   get lifespan() { return 520 + this.genome.size * 280; }
   get reproduceThreshold() {
     let factor = 0.72;
-    if (this.role === 'reproducer') factor = 0.58;
+    if (this.role === 'germ') factor = 0.55;
     return this.maxEnergy * factor;
   }
   get captureRadius() { return 3.8 + this.genome.size * 3.4; }
   get effectiveSize() { return this.genome.size * this.colonySize; }
 
   updateRole(clusterMembers) {
-    if (!clusterMembers || clusterMembers.length < 2) { this.role = 'unicellular'; return; }
+    if (!clusterMembers || clusterMembers.length < 2) {
+      this.role = 'unicellular';
+      this.bondedPartners = [];
+      return;
+    }
     const dToCenter = Math.sqrt(dist2(this.x, this.y, this.centroidX, this.centroidY));
     const g = this.genome;
-    if (dToCenter < 12 && g.colony > 0.5) this.role = 'reproducer';
-    else if (g.aggression > 0.4 || g.diet > 0.35) this.role = 'defender';
-    else if (g.speed > 1.4) this.role = 'navigator';
-    else this.role = 'feeder';
+
+    if (dToCenter < 10 && g.colony > 0.5) this.role = 'germ';
+    else if (g.membrane > 0.65 || g.size > 2.0) this.role = 'shield';
+    else if (g.speed > 1.5) this.role = 'motor';
+    else if (g.sense > 100) this.role = 'ocellus';
+    else this.role = 'digestor';
+
+    this.bondedPartners = clusterMembers.filter(m => m !== this && dist2(this.x, this.y, m.x, m.y) < 26 * 26);
   }
 
   perceive(foodGrid, spatialHash, W, H) {
-    const senseR = this.genome.sense;
+    let senseR = this.genome.sense;
+    if (this.role === 'ocellus') senseR *= 1.6;
     const senseR2 = senseR * senseR;
 
     const bestFoodCell = foodGrid.bestCellNear(this.x, this.y, senseR);
@@ -438,8 +500,8 @@ class Organism {
   step(foodGrid, spatialHash, W, H, tempFactor = 1.0) {
     if (!this.alive) return;
 
-    const inputs = this.perceive(foodGrid, spatialHash, W, H);
-    const outputs = this.brain.forward(inputs);
+    const envInputs = this.perceive(foodGrid, spatialHash, W, H);
+    const outputs = this.brain.forward(envInputs);
 
     let dirX = outputs[0], dirY = outputs[1];
     const attackImpulse = outputs[2];
@@ -457,8 +519,49 @@ class Organism {
     this.vx = lerp(this.vx, targetVx, 0.32);
     this.vy = lerp(this.vy, targetVy, 0.32);
 
+    const REST_LENGTH = 14;
+    const STIFFNESS = 0.08;
+    const DAMPING = 0.04;
+
+    for (let i = 0; i < this.bondedPartners.length; i++) {
+      const partner = this.bondedPartners[i];
+      if (!partner.alive) continue;
+
+      const dx = partner.x - this.x;
+      const dy = partner.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+      const delta = dist - REST_LENGTH;
+
+      const springF = delta * STIFFNESS;
+      const nx = dx / dist;
+      const ny = dy / dist;
+
+      const relVx = partner.vx - this.vx;
+      const relVy = partner.vy - this.vy;
+      const dampF = (relVx * nx + relVy * ny) * DAMPING;
+
+      const totalF = springF + dampF;
+      this.vx += nx * totalF;
+      this.vy += ny * totalF;
+
+      if (this.role === 'digestor' && this.energy > this.maxEnergy * 0.6 && partner.energy < partner.maxEnergy * 0.5) {
+        const transfer = 0.12;
+        this.energy -= transfer;
+        partner.energy += transfer;
+      }
+    }
+
+    const biome = foodGrid.biomeAt(this.x, this.y);
+    if (biome === 'pelagic') {
+      this.vx += Math.sin(this.y * 0.01) * 0.08;
+    }
+
     this.x = (this.x + this.vx + W) % W;
     this.y = (this.y + this.vy + H) % H;
+
+    if (this.genome.pheromoneRate > 0.2 && Math.random() < this.genome.pheromoneRate * 0.4) {
+      foodGrid.depositPheromone(this.x, this.y, 0.18 * this.genome.pheromoneRate);
+    }
 
     if (this.energy < this.maxEnergy * 0.98) {
       const eaten = foodGrid.eat(this.x, this.y, this.eatRate);
@@ -478,9 +581,11 @@ class Organism {
         if (d2 <= this.captureRadius * this.captureRadius) {
           const sameLineage = hueDiff(this.genome.hue, other.genome.hue) < 12;
           if (!sameLineage && other.effectiveSize * 1.08 < this.effectiveSize) {
-            const selfPower = this.genome.aggression * 0.4 + (this.effectiveSize - other.effectiveSize) * 0.06;
-            const defenderPower = other.genome.membrane * 0.35 + other.genome.aggression * 0.15;
-            const successP = clamp(0.44 + selfPower - defenderPower, 0.08, 0.92);
+            let selfPower = this.genome.aggression * 0.4 + (this.effectiveSize - other.effectiveSize) * 0.06;
+            let defenderPower = other.genome.membrane * 0.35 + other.genome.aggression * 0.15;
+            if (other.role === 'shield') defenderPower *= 1.8;
+
+            const successP = clamp(0.44 + selfPower - defenderPower, 0.05, 0.92);
 
             if (Math.random() < successP) {
               const meatGain = other.energy * 0.65 * clamp(0.35 + this.genome.diet * 0.85, 0.35, 1.0);
@@ -514,6 +619,9 @@ class World {
     this.tickCount = 0;
     this.MULTICELLULAR_THRESHOLD = 7;
 
+    this.cladeTree = new Map();
+    this.fossilRecord = [];
+
     this.params = Object.assign({
       foodGrowth: 0.011,
       mutationRate: 0.1,
@@ -526,33 +634,53 @@ class World {
     this.stats = {
       population: 0, species: 0, colonies: 0, multicellular: 0,
       avgSize: 0, avgSpeed: 0, herbivores: 0, carnivores: 0,
-      foodCoverage: 0, maxGeneration: 1
+      foodCoverage: 0, maxGeneration: 1, topSpecies: 'None'
     };
     this.history = [];
     this._extinctFor = 0;
+  }
+
+  registerSpecies(speciesName, parentName, hue) {
+    if (!this.cladeTree.has(speciesName)) {
+      this.cladeTree.set(speciesName, {
+        name: speciesName,
+        parentName: parentName || 'Abiogenesis',
+        originTick: this.tickCount,
+        hue: hue || 180,
+        count: 0,
+        totalEver: 0,
+        extinct: false,
+      });
+    }
   }
 
   seed(count = 60) {
     const ancestorGenome = {
       size: 0.85, speed: 0.9, sense: 50, diet: 0.05,
       aggression: 0.08, colony: 0.15, membrane: 0.5,
-      plasticity: 0.4, mutationRate: 0.1, hue: Math.random() * 360,
+      plasticity: 0.4, pheromoneRate: 0.2, mutationRate: 0.1, hue: Math.random() * 360,
     };
+    ancestorGenome.speciesName = generateSpeciesName(ancestorGenome);
+    this.registerSpecies(ancestorGenome.speciesName, 'Abiogenesis', ancestorGenome.hue);
 
     for (let i = 0; i < count; i++) {
       const g = mutateGenome(ancestorGenome, 0.08);
+      this.registerSpecies(g.speciesName, ancestorGenome.speciesName, g.hue);
       const x = Math.random() * this.width;
       const y = Math.random() * this.height;
       this.organisms.push(new Organism(x, y, g, undefined, 1, undefined));
     }
   }
 
-  spawn(genome, x, y, energyFrac, brain) {
+  spawn(genome, x, y, energyFrac, brain, parentId) {
     const g = genome ? Object.assign({}, genome) : randomGenome();
+    if (!g.speciesName) g.speciesName = generateSpeciesName(g);
+    this.registerSpecies(g.speciesName, 'HandDesign', g.hue);
+
     const org = new Organism(
       x !== undefined ? x : Math.random() * this.width,
       y !== undefined ? y : Math.random() * this.height,
-      g, undefined, 1, undefined, brain
+      g, undefined, 1, undefined, brain, parentId
     );
     if (energyFrac !== undefined) org.energy = org.maxEnergy * energyFrac;
     this.organisms.push(org);
@@ -567,7 +695,7 @@ class World {
     const W = this.width, H = this.height;
     const p = this.params;
 
-    this.food.grow(p.foodGrowth);
+    this.food.grow(p.foodGrowth, this.tickCount);
 
     const hash = new SpatialHash(W, H, 40);
     const alive = [];
@@ -643,6 +771,15 @@ class World {
       if (o.energy <= 0 || o.age > o.lifespan) {
         o.alive = false;
         this.food.deposit(o.x, o.y, 0.12 * o.genome.size);
+
+        if (o.kills >= 3 || o.offspringCount >= 4 || o.age > 700) {
+          this.fossilRecord.push({
+            id: o.id, speciesName: o.genome.speciesName,
+            age: o.age, kills: o.kills, offspringCount: o.offspringCount,
+            generation: o.generation, genome: Object.assign({}, o.genome),
+          });
+          if (this.fossilRecord.length > 25) this.fossilRecord.shift();
+        }
         continue;
       }
 
@@ -674,6 +811,8 @@ class World {
           childBrain.mutate(p.mutationRate);
         }
 
+        this.registerSpecies(childGenome.speciesName, o.genome.speciesName, childGenome.hue);
+
         const energyAlloc = o.energy * 0.45;
         o.energy *= 0.52;
         o.reproCooldown = 50 + Math.floor(o.genome.size * 18);
@@ -682,7 +821,7 @@ class World {
         const child = new Organism(
           (o.x + Math.cos(angle) * 8 + W) % W,
           (o.y + Math.sin(angle) * 8 + H) % H,
-          childGenome, energyAlloc, o.generation + 1, o.lineageId, childBrain
+          childGenome, energyAlloc, o.generation + 1, o.lineageId, childBrain, o.id
         );
 
         newborns.push(child);
@@ -716,10 +855,13 @@ class World {
     const s = this.stats;
     s.population = orgs.length;
 
+    for (const node of this.cladeTree.values()) node.count = 0;
+
     if (orgs.length === 0) {
       s.species = 0; s.colonies = 0; s.multicellular = 0;
       s.avgSize = 0; s.avgSpeed = 0; s.herbivores = 0; s.carnivores = 0;
       s.foodCoverage = this.food.coverage();
+      s.topSpecies = 'None';
       return;
     }
 
@@ -736,10 +878,24 @@ class World {
       if (o.generation > maxGen) maxGen = o.generation;
       hues.push(o.genome.hue);
 
+      const sName = o.genome.speciesName || 'Unknown';
+      if (!this.cladeTree.has(sName)) this.registerSpecies(sName, 'Unknown', o.genome.hue);
+      const node = this.cladeTree.get(sName);
+      node.count++;
+      node.totalEver++;
+
       if (o.colonyMemberCount > 1 && !seenGroups.has(o.colonyGroupId)) {
         seenGroups.add(o.colonyGroupId);
         colonies++;
         if (o.colonyMemberCount >= this.MULTICELLULAR_THRESHOLD) multicell++;
+      }
+    }
+
+    let topName = 'None', maxCount = 0;
+    for (const node of this.cladeTree.values()) {
+      if (node.count > maxCount) {
+        maxCount = node.count;
+        topName = node.name;
       }
     }
 
@@ -758,12 +914,12 @@ class World {
     s.carnivores = carn;
     s.foodCoverage = this.food.coverage();
     s.maxGeneration = maxGen;
+    s.topSpecies = `${topName} (${maxCount})`;
   }
 }
 
-
 // =====================================================================
-// UI & CANVAS RENDERER LAYER
+// PHASE 2 UI & ENHANCED GRAPHICS RENDERER LAYER
 // =====================================================================
 
 const canvas = document.getElementById('sea');
@@ -773,6 +929,8 @@ const popChart = document.getElementById('popChart');
 const popCtx = popChart.getContext('2d');
 const brainCanvas = document.getElementById('brainCanvas');
 const brainCtx = brainCanvas.getContext('2d');
+const minimapCanvas = document.getElementById('minimapCanvas');
+const minimapCtx = minimapCanvas.getContext('2d');
 
 const world = new World({ width: 1000, height: 650 });
 world.seed(60);
@@ -780,8 +938,9 @@ world.seed(60);
 let paused = false;
 let ticksPerFrame = 1;
 let selected = null;
+let hovered = null;
+let followMode = false;
 
-// Camera view transform (zoom & pan)
 let camera = { x: world.width / 2, y: world.height / 2, zoom: 1.0 };
 let isDragging = false;
 let dragStart = { x: 0, y: 0 };
@@ -816,7 +975,6 @@ function screenToWorld(px, py) {
   return [(px - m.offX) / m.scale, (py - m.offY) / m.scale];
 }
 
-// Camera Mouse & Wheel Controls
 stage.addEventListener('mousedown', (e) => {
   if (e.target !== canvas) return;
   isDragging = true;
@@ -824,17 +982,31 @@ stage.addEventListener('mousedown', (e) => {
 });
 
 stage.addEventListener('mousemove', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const px = (e.clientX - rect.left) * (canvas.width / rect.width);
+  const py = (e.clientY - rect.top) * (canvas.height / rect.height);
+  const [wx, wy] = screenToWorld(px, py);
+
+  // Hover detection for creature tooltip
+  let hBest = null, hD = 22 * 22;
+  for (let i = 0; i < world.organisms.length; i++) {
+    const o = world.organisms[i];
+    const d2 = dist2(o.x, o.y, wx, wy);
+    if (d2 < hD) { hD = d2; hBest = o; }
+  }
+  hovered = hBest;
+  updateHoverTooltip(e.clientX, e.clientY);
+
   if (!isDragging) return;
   const m = getMapping();
   const dx = (e.clientX - dragStart.x) * (canvas.width / stage.clientWidth) / m.scale;
   const dy = (e.clientY - dragStart.y) * (canvas.height / stage.clientHeight) / m.scale;
-  camera.x -= dx;
-  camera.y -= dy;
+  camera.x -= dx; camera.y -= dy;
   dragStart = { x: e.clientX, y: e.clientY };
 });
 
 stage.addEventListener('mouseup', () => { isDragging = false; });
-stage.addEventListener('mouseleave', () => { isDragging = false; });
+stage.addEventListener('mouseleave', () => { isDragging = false; hovered = null; updateHoverTooltip(); });
 
 stage.addEventListener('wheel', (e) => {
   e.preventDefault();
@@ -844,133 +1016,263 @@ stage.addEventListener('wheel', (e) => {
 
 document.getElementById('resetCamBtn').addEventListener('click', () => {
   camera = { x: world.width / 2, y: world.height / 2, zoom: 1.0 };
+  followMode = false;
+  document.getElementById('followBtn').textContent = 'Follow Cell: OFF';
+  document.getElementById('followBtn').classList.remove('active');
 });
 
-// Render Main Sea Canvas
+const followBtn = document.getElementById('followBtn');
+followBtn.addEventListener('click', () => {
+  followMode = !followMode;
+  followBtn.textContent = followMode ? 'Follow Cell: ON' : 'Follow Cell: OFF';
+  if (followMode) followBtn.classList.add('active'); else followBtn.classList.remove('active');
+});
+
+// Update Hover Tooltip HUD
+const tt = document.getElementById('creatureTooltip');
+function updateHoverTooltip(screenX, screenY) {
+  if (!hovered || !hovered.alive) {
+    tt.style.display = 'none';
+    return;
+  }
+  tt.style.display = 'block';
+  tt.style.left = screenX + 'px';
+  tt.style.top = screenY + 'px';
+  document.getElementById('ttTitle').textContent = hovered.genome.speciesName;
+  document.getElementById('ttInfo').textContent = `${hovered.role} · ${hovered.age} ticks · Gen ${hovered.generation}`;
+  const pct = Math.round((hovered.energy / hovered.maxEnergy) * 100);
+  document.getElementById('ttEnergyBar').style.width = pct + '%';
+}
+
+// Render Main Sea Canvas with Bioluminescence & Tissue Stretching
 function render() {
+  if (followMode && selected && selected.alive) {
+    camera.x = lerp(camera.x, selected.x, 0.1);
+    camera.y = lerp(camera.y, selected.y, 0.1);
+  }
+
   const m = getMapping();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.fillStyle = '#111915';
+  ctx.fillStyle = '#070b09';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   ctx.save();
   ctx.translate(m.offX, m.offY);
   ctx.scale(m.scale, m.scale);
 
-  // Background water gradient
-  const grad = ctx.createRadialGradient(
-    world.width * 0.5, world.height * 0.2, 40,
-    world.width * 0.5, world.height * 0.65, world.width * 0.8
-  );
-  grad.addColorStop(0, '#24372b');
-  grad.addColorStop(1, '#131e17');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, world.width, world.height);
+  // Multi-Biome Background Gradients
+  const gradPhotic = ctx.createLinearGradient(0, 0, 0, world.height * 0.35);
+  gradPhotic.addColorStop(0, '#2d4a39');
+  gradPhotic.addColorStop(1, '#1b2d23');
+  ctx.fillStyle = gradPhotic;
+  ctx.fillRect(0, 0, world.width, world.height * 0.35);
 
-  // Hydrothermal Vents
+  const gradPelagic = ctx.createLinearGradient(0, world.height * 0.35, 0, world.height * 0.70);
+  gradPelagic.addColorStop(0, '#1b2d23');
+  gradPelagic.addColorStop(1, '#111f18');
+  ctx.fillStyle = gradPelagic;
+  ctx.fillRect(0, world.height * 0.35, world.width, world.height * 0.35);
+
+  const gradAbyssal = ctx.createLinearGradient(0, world.height * 0.70, 0, world.height);
+  gradAbyssal.addColorStop(0, '#111f18');
+  gradAbyssal.addColorStop(1, '#070c09');
+  ctx.fillStyle = gradAbyssal;
+  ctx.fillRect(0, world.height * 0.70, world.width, world.height * 0.30);
+
+  // Sunlit Photic Surface Caustics
+  const dayPhase = Math.sin((world.tickCount * Math.PI) / 120);
+  if (dayPhase > 0) {
+    ctx.strokeStyle = `rgba(180, 230, 200, ${0.08 * dayPhase})`;
+    ctx.lineWidth = 15;
+    for (let c = 0; c < 5; c++) {
+      const cx = (c * 220 + world.tickCount * 0.5) % world.width;
+      ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx + 80, world.height * 0.35); ctx.stroke();
+    }
+  }
+
+  // Biome Division Boundary Lines
+  ctx.strokeStyle = 'rgba(60, 174, 163, 0.35)';
+  ctx.lineWidth = 1 / m.scale;
+  ctx.setLineDash([8, 8]);
+  ctx.beginPath(); ctx.moveTo(0, world.height * 0.35); ctx.lineTo(world.width, world.height * 0.35); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, world.height * 0.70); ctx.lineTo(world.width, world.height * 0.70); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Hydrothermal Vent Embers
   for (let i = 0; i < world.food.vents.length; i++) {
     const v = world.food.vents[i];
     const vx = (v.cx + 0.5) * world.food.cellSize;
     const vy = (v.cy + 0.5) * world.food.cellSize;
-    const pulse = 1.0 + Math.sin(world.tickCount * 0.08 + i) * 0.12;
+    const pulse = 1.0 + Math.sin(world.tickCount * 0.08 + i) * 0.14;
     const r = v.r * world.food.cellSize * 1.8 * pulse;
 
     const g = ctx.createRadialGradient(vx, vy, 0, vx, vy, r);
-    g.addColorStop(0, 'rgba(226,98,43,0.22)');
-    g.addColorStop(0.6, 'rgba(226,98,43,0.08)');
-    g.addColorStop(1, 'rgba(226,98,43,0)');
+    g.addColorStop(0, 'rgba(240,106,56,0.35)');
+    g.addColorStop(0.5, 'rgba(240,106,56,0.12)');
+    g.addColorStop(1, 'rgba(240,106,56,0)');
     ctx.fillStyle = g;
     ctx.beginPath(); ctx.arc(vx, vy, r, 0, Math.PI * 2); ctx.fill();
-  }
 
-  // Food Grid Density
-  const cs = world.food.cellSize;
-  const dens = world.food.density;
-  for (let cy = 0; cy < world.food.rows; cy++) {
-    for (let cx = 0; cx < world.food.cols; cx++) {
-      const d = dens[cy * world.food.cols + cx];
-      if (d < 0.05) continue;
-      const alpha = Math.min(0.6, d * 0.6);
-      ctx.fillStyle = `rgba(140,185,85,${alpha})`;
-      ctx.fillRect(cx * cs, cy * cs, cs + 0.5, cs + 0.5);
+    // Vent Rising Embers
+    for (let e = 0; e < 3; e++) {
+      const ey = vy - ((world.tickCount * 1.5 + e * 20) % (r * 0.9));
+      const ex = vx + Math.sin(ey * 0.1 + e) * 6;
+      ctx.fillStyle = 'rgba(255,209,102,0.6)';
+      ctx.beginPath(); ctx.arc(ex, ey, 1.2, 0, Math.PI * 2); ctx.fill();
     }
   }
 
-  // Connective colony filaments
-  ctx.lineWidth = 1;
+  // Food & Pheromone Grid Density
+  const cs = world.food.cellSize;
+  const dens = world.food.density;
+  const phero = world.food.pheromones;
+  for (let cy = 0; cy < world.food.rows; cy++) {
+    for (let cx = 0; cx < world.food.cols; cx++) {
+      const idx = cy * world.food.cols + cx;
+      const d = dens[idx];
+      const p = phero[idx];
+
+      if (d > 0.05) {
+        const alpha = Math.min(0.58, d * 0.58);
+        ctx.fillStyle = `rgba(140,185,85,${alpha})`;
+        ctx.fillRect(cx * cs, cy * cs, cs + 0.5, cs + 0.5);
+      }
+      if (p > 0.05) {
+        ctx.fillStyle = `rgba(60,174,163,${p * 0.45})`;
+        ctx.fillRect(cx * cs, cy * cs, cs + 0.5, cs + 0.5);
+      }
+    }
+  }
+
+  // Multicellular Tissue Stretching Polygon Mesh
   for (let i = 0; i < world.organisms.length; i++) {
     const o = world.organisms[i];
     if (o.colonyMemberCount > 1) {
-      ctx.strokeStyle = 'rgba(226,98,43,0.38)';
-      ctx.beginPath();
-      ctx.moveTo(o.x, o.y);
-      ctx.lineTo(o.centroidX, o.centroidY);
-      ctx.stroke();
+      for (let j = 0; j < o.bondedPartners.length; j++) {
+        const partner = o.bondedPartners[j];
+        if (partner.alive) {
+          ctx.strokeStyle = `hsla(${o.genome.hue.toFixed(0)}, 65%, 55%, 0.45)`;
+          ctx.lineWidth = Math.min(o.genome.size, partner.genome.size) * 2.2;
+          ctx.beginPath(); ctx.moveTo(o.x, o.y); ctx.lineTo(partner.x, partner.partnerY || partner.y); ctx.stroke();
+        }
+      }
     }
   }
 
-  // Multicellular glowing halos
+  // Multicellular Glowing Halos
   const haloSeen = new Set();
   for (let i = 0; i < world.organisms.length; i++) {
     const o = world.organisms[i];
     if (o.colonyMemberCount >= world.MULTICELLULAR_THRESHOLD && !haloSeen.has(o.colonyGroupId)) {
       haloSeen.add(o.colonyGroupId);
-      const r = 12 + o.colonyMemberCount * 3.4;
+      const r = 15 + o.colonyMemberCount * 3.6;
       const g = ctx.createRadialGradient(o.centroidX, o.centroidY, 0, o.centroidX, o.centroidY, r);
-      g.addColorStop(0, 'rgba(226,98,43,0.25)');
-      g.addColorStop(1, 'rgba(226,98,43,0)');
+      g.addColorStop(0, 'rgba(240,106,56,0.3)');
+      g.addColorStop(0.7, 'rgba(240,106,56,0.1)');
+      g.addColorStop(1, 'rgba(240,106,56,0)');
       ctx.fillStyle = g;
       ctx.beginPath(); ctx.arc(o.centroidX, o.centroidY, r, 0, Math.PI * 2); ctx.fill();
     }
   }
 
-  // Organisms with tentacles & cilia
+  // Organisms with Bioluminescent Glow & Organelle Details
   for (let i = 0; i < world.organisms.length; i++) {
     const o = world.organisms[i];
-    const r = 2.2 + o.genome.size * 2.3;
+    const r = 2.4 + o.genome.size * 2.4;
     const light = 42 + o.genome.diet * 12;
     const sat = 55 + o.genome.colony * 20;
 
-    // Tentacles / cilia based on speed
-    if (o.genome.speed > 1.1) {
-      const cCount = Math.floor(4 + o.genome.speed * 3);
-      ctx.strokeStyle = `hsla(${o.genome.hue.toFixed(0)},${sat}%,${light}%,0.45)`;
-      ctx.lineWidth = 0.8;
+    // Outer Bioluminescent Radial Aura
+    const auraG = ctx.createRadialGradient(o.x, o.y, r * 0.4, o.x, o.y, r * 2.2);
+    auraG.addColorStop(0, `hsla(${o.genome.hue.toFixed(0)},${sat}%,${light + 18}%,0.4)`);
+    auraG.addColorStop(1, `hsla(${o.genome.hue.toFixed(0)},${sat}%,${light}%,0)`);
+    ctx.fillStyle = auraG;
+    ctx.beginPath(); ctx.arc(o.x, o.y, r * 2.2, 0, Math.PI * 2); ctx.fill();
+
+    // Flagellar Motor Tails
+    if (o.role === 'motor' || o.genome.speed > 1.2) {
+      const cCount = Math.floor(3 + o.genome.speed * 2.5);
+      ctx.strokeStyle = `hsla(${o.genome.hue.toFixed(0)},${sat}%,${light + 10}%,0.65)`;
+      ctx.lineWidth = 1.0;
       for (let c = 0; c < cCount; c++) {
-        const angle = (c / cCount) * Math.PI * 2 + world.tickCount * 0.15;
-        const tx = o.x + Math.cos(angle) * (r + 3.5);
-        const ty = o.y + Math.sin(angle) * (r + 3.5);
+        const angle = (c / cCount) * Math.PI * 2 + world.tickCount * 0.2;
+        const tx = o.x + Math.cos(angle) * (r + 4.5);
+        const ty = o.y + Math.sin(angle) * (r + 4.5);
         ctx.beginPath(); ctx.moveTo(o.x, o.y); ctx.lineTo(tx, ty); ctx.stroke();
       }
     }
 
-    // Cell Body
+    // Cell Body Core
     ctx.beginPath();
     ctx.arc(o.x, o.y, r, 0, Math.PI * 2);
     ctx.fillStyle = `hsl(${o.genome.hue.toFixed(0)},${sat}%,${light + 18}%)`;
     ctx.fill();
 
-    // Predator outline
-    if (o.genome.diet > 0.3) {
-      ctx.lineWidth = 0.9;
-      ctx.strokeStyle = 'rgba(193,68,58,0.85)';
+    // Inner Nucleus Organelle
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.beginPath(); ctx.arc(o.x, o.y, r * 0.35, 0, Math.PI * 2); ctx.fill();
+
+    // Morphotype Specific Armor / Eye Spot / Digestor Details
+    if (o.role === 'shield') {
+      ctx.lineWidth = 1.8;
+      ctx.strokeStyle = '#ffd166';
+      ctx.stroke();
+    } else if (o.role === 'ocellus') {
+      ctx.fillStyle = '#3caea3';
+      ctx.beginPath(); ctx.arc(o.x + r * 0.5, o.y, r * 0.3, 0, Math.PI * 2); ctx.fill();
+    } else if (o.genome.diet > 0.3) {
+      ctx.lineWidth = 1.1;
+      ctx.strokeStyle = 'rgba(230,57,70,0.9)';
       ctx.stroke();
     }
 
-    // Selection ring & sense radius
+    // Selection Ring
     if (o === selected) {
-      ctx.lineWidth = 1.8;
-      ctx.strokeStyle = '#f2f0e6';
-      ctx.beginPath(); ctx.arc(o.x, o.y, r + 3, 0, Math.PI * 2); ctx.stroke();
+      ctx.lineWidth = 2.0;
+      ctx.strokeStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(o.x, o.y, r + 3.5, 0, Math.PI * 2); ctx.stroke();
 
       ctx.setLineDash([3, 3]);
-      ctx.strokeStyle = 'rgba(226,98,43,0.55)';
+      ctx.strokeStyle = 'rgba(240,106,56,0.6)';
       ctx.beginPath(); ctx.arc(o.x, o.y, o.genome.sense, 0, Math.PI * 2); ctx.stroke();
       ctx.setLineDash([]);
     }
   }
 
   ctx.restore();
+
+  // Render Mini-Map Radar Overview
+  renderMinimap();
+}
+
+// Render Mini-Map Radar Overview (#minimapCanvas)
+function renderMinimap() {
+  const mw = minimapCanvas.width, mh = minimapCanvas.height;
+  minimapCtx.clearRect(0, 0, mw, mh);
+
+  minimapCtx.fillStyle = 'rgba(10, 16, 13, 0.9)';
+  minimapCtx.fillRect(0, 0, mw, mh);
+
+  const scaleX = mw / world.width;
+  const scaleY = mh / world.height;
+
+  // Organisms on Radar
+  for (let i = 0; i < world.organisms.length; i++) {
+    const o = world.organisms[i];
+    minimapCtx.fillStyle = `hsl(${o.genome.hue.toFixed(0)}, 70%, 60%)`;
+    minimapCtx.fillRect(o.x * scaleX, o.y * scaleY, 1.8, 1.8);
+  }
+
+  // Camera Viewport Rectangle Box
+  const m = getMapping();
+  const vx = (-m.offX / m.scale) * scaleX;
+  const vy = (-m.offY / m.scale) * scaleY;
+  const vw = (canvas.width / m.scale) * scaleX;
+  const vh = (canvas.height / m.scale) * scaleY;
+
+  minimapCtx.strokeStyle = '#3caea3';
+  minimapCtx.lineWidth = 1;
+  minimapCtx.strokeRect(vx, vy, vw, vh);
 }
 
 // Render Population Graph Chart
@@ -988,12 +1290,12 @@ function renderPopChart() {
     const y = h - 4 - (p.pop / maxPop) * (h - 8);
     if (i === 0) popCtx.moveTo(x, y); else popCtx.lineTo(x, y);
   });
-  popCtx.strokeStyle = '#e2622b';
+  popCtx.strokeStyle = '#3caea3';
   popCtx.lineWidth = 1.4;
   popCtx.stroke();
 }
 
-// Render Neural Network Brain Diagram
+// Render 10-8-6 Recurrent Neural Network (RNN) Brain Graph
 function renderBrainGraph() {
   const w = brainCanvas.width, h = brainCanvas.height;
   brainCtx.clearRect(0, 0, w, h);
@@ -1004,11 +1306,11 @@ function renderBrainGraph() {
     brainCtx.fillStyle = '#8b9488';
     brainCtx.font = '11px ui-monospace, monospace';
     brainCtx.textAlign = 'center';
-    brainCtx.fillText('Click any cell in the sea to inspect its brain', w / 2, h / 2);
+    brainCtx.fillText('Click any cell in the ocean to inspect its RNN brain', w / 2, h / 2);
     return;
   }
 
-  document.getElementById('brainTargetLabel').textContent = `Cell #${selected.id}`;
+  document.getElementById('brainTargetLabel').textContent = `Cell #${selected.id} (${selected.genome.speciesName})`;
   document.getElementById('brainActions').style.display = 'block';
 
   const brain = selected.brain;
@@ -1016,28 +1318,27 @@ function renderBrainGraph() {
   const hidden = brain.hidden;
   const outputs = brain.outputs;
 
-  const inputLabels = ['F.dx', 'F.dy', 'P.dx', 'P.dy', 'T.dx', 'T.dy', 'K.dx', 'NRG'];
-  const outputLabels = ['MovX', 'MovY', 'Atk', 'Col'];
+  const inputLabels = ['F.dx', 'F.dy', 'P.dx', 'P.dy', 'T.dx', 'T.dy', 'K.dx', 'NRG', 'M1.in', 'M2.in'];
+  const outputLabels = ['MovX', 'MovY', 'Atk', 'Col', 'M1.out', 'M2.out'];
 
-  // Node Positions
-  const layerX = [35, w / 2, w - 40];
+  const layerX = [38, w / 2, w - 46];
   const inputY = [];
   const hiddenY = [];
   const outputY = [];
 
-  for (let i = 0; i < 8; i++) inputY.push(16 + i * 17);
-  for (let hIndex = 0; hIndex < 6; hIndex++) hiddenY.push(26 + hIndex * 21);
-  for (let o = 0; o < 4; o++) outputY.push(32 + o * 30);
+  for (let i = 0; i < 10; i++) inputY.push(14 + i * 16);
+  for (let hIndex = 0; hIndex < 8; hIndex++) hiddenY.push(18 + hIndex * 20.5);
+  for (let o = 0; o < 6; o++) outputY.push(22 + o * 27);
 
-  // Draw Synaptic Connections W1 (Input -> Hidden)
-  for (let hIndex = 0; hIndex < 6; hIndex++) {
-    const rowOffset = hIndex * 8;
-    for (let i = 0; i < 8; i++) {
+  // W1 (Inputs -> Hidden)
+  for (let hIndex = 0; hIndex < 8; hIndex++) {
+    const rowOffset = hIndex * 10;
+    for (let i = 0; i < 10; i++) {
       const weight = brain.W1[rowOffset + i];
       if (Math.abs(weight) < 0.05) continue;
       const alpha = clamp(Math.abs(weight) / 2.5, 0.12, 0.85);
-      brainCtx.strokeStyle = weight > 0 ? `rgba(60,174,163,${alpha})` : `rgba(226,98,43,${alpha})`;
-      brainCtx.lineWidth = clamp(Math.abs(weight) * 1.2, 0.5, 2.5);
+      brainCtx.strokeStyle = weight > 0 ? `rgba(60,174,163,${alpha})` : `rgba(240,106,56,${alpha})`;
+      brainCtx.lineWidth = clamp(Math.abs(weight) * 1.2, 0.5, 2.4);
       brainCtx.beginPath();
       brainCtx.moveTo(layerX[0], inputY[i]);
       brainCtx.lineTo(layerX[1], hiddenY[hIndex]);
@@ -1045,15 +1346,15 @@ function renderBrainGraph() {
     }
   }
 
-  // Draw Synaptic Connections W2 (Hidden -> Output)
-  for (let o = 0; o < 4; o++) {
-    const rowOffset = o * 6;
-    for (let hIndex = 0; hIndex < 6; hIndex++) {
+  // W2 (Hidden -> Outputs)
+  for (let o = 0; o < 6; o++) {
+    const rowOffset = o * 8;
+    for (let hIndex = 0; hIndex < 8; hIndex++) {
       const weight = brain.W2[rowOffset + hIndex];
       if (Math.abs(weight) < 0.05) continue;
       const alpha = clamp(Math.abs(weight) / 2.5, 0.12, 0.85);
-      brainCtx.strokeStyle = weight > 0 ? `rgba(60,174,163,${alpha})` : `rgba(226,98,43,${alpha})`;
-      brainCtx.lineWidth = clamp(Math.abs(weight) * 1.2, 0.5, 2.5);
+      brainCtx.strokeStyle = weight > 0 ? `rgba(60,174,163,${alpha})` : `rgba(240,106,56,${alpha})`;
+      brainCtx.lineWidth = clamp(Math.abs(weight) * 1.2, 0.5, 2.4);
       brainCtx.beginPath();
       brainCtx.moveTo(layerX[1], hiddenY[hIndex]);
       brainCtx.lineTo(layerX[2], outputY[o]);
@@ -1061,50 +1362,51 @@ function renderBrainGraph() {
     }
   }
 
-  // Draw Input Neurons
-  for (let i = 0; i < 8; i++) {
+  // Input Nodes
+  for (let i = 0; i < 10; i++) {
     const act = inputs[i] || 0;
-    brainCtx.fillStyle = `rgba(60,174,163,${0.3 + Math.abs(act) * 0.7})`;
-    brainCtx.beginPath(); brainCtx.arc(layerX[0], inputY[i], 4, 0, Math.PI * 2); brainCtx.fill();
+    brainCtx.fillStyle = i >= 8 ? `rgba(255,209,102,${0.4 + Math.abs(act) * 0.6})` : `rgba(60,174,163,${0.3 + Math.abs(act) * 0.7})`;
+    brainCtx.beginPath(); brainCtx.arc(layerX[0], inputY[i], 3.8, 0, Math.PI * 2); brainCtx.fill();
     brainCtx.fillStyle = '#8b9488';
-    brainCtx.font = '9px ui-monospace, monospace';
+    brainCtx.font = '8.5px ui-monospace, monospace';
     brainCtx.textAlign = 'right';
-    brainCtx.fillText(inputLabels[i], layerX[0] - 6, inputY[i] + 3);
+    brainCtx.fillText(inputLabels[i], layerX[0] - 5, inputY[i] + 3);
   }
 
-  // Draw Hidden Neurons
-  for (let hIndex = 0; hIndex < 6; hIndex++) {
+  // Hidden Nodes
+  for (let hIndex = 0; hIndex < 8; hIndex++) {
     const act = hidden[hIndex] || 0;
-    brainCtx.fillStyle = `rgba(222,227,214,${0.3 + Math.abs(act) * 0.7})`;
-    brainCtx.beginPath(); brainCtx.arc(layerX[1], hiddenY[hIndex], 5, 0, Math.PI * 2); brainCtx.fill();
+    brainCtx.fillStyle = `rgba(230,235,217,${0.3 + Math.abs(act) * 0.7})`;
+    brainCtx.beginPath(); brainCtx.arc(layerX[1], hiddenY[hIndex], 4.5, 0, Math.PI * 2); brainCtx.fill();
   }
 
-  // Draw Output Neurons
-  for (let o = 0; o < 4; o++) {
+  // Output Nodes
+  for (let o = 0; o < 6; o++) {
     const act = outputs[o] || 0;
-    brainCtx.fillStyle = `rgba(226,98,43,${0.3 + Math.abs(act) * 0.7})`;
-    brainCtx.beginPath(); brainCtx.arc(layerX[2], outputY[o], 5, 0, Math.PI * 2); brainCtx.fill();
-    brainCtx.fillStyle = '#dee3d6';
-    brainCtx.font = '9px ui-monospace, monospace';
+    brainCtx.fillStyle = o >= 4 ? `rgba(255,209,102,${0.4 + Math.abs(act) * 0.6})` : `rgba(240,106,56,${0.3 + Math.abs(act) * 0.7})`;
+    brainCtx.beginPath(); brainCtx.arc(layerX[2], outputY[o], 4.5, 0, Math.PI * 2); brainCtx.fill();
+    brainCtx.fillStyle = '#e6ebd9';
+    brainCtx.font = '8.5px ui-monospace, monospace';
     brainCtx.textAlign = 'left';
-    brainCtx.fillText(outputLabels[o], layerX[2] + 7, outputY[o] + 3);
+    brainCtx.fillText(outputLabels[o], layerX[2] + 6, outputY[o] + 3);
   }
 }
 
-// Render Stats & Telemetry Panel
+// Render Telemetry & Stats Panel
 const statGrid = document.getElementById('statGrid');
 function renderStats() {
   const s = world.stats;
   const rows = [
     ['Population', s.population],
-    ['Distinct Lineages', s.species],
+    ['Distinct Species', s.species],
+    ['Dominant Species', s.topSpecies, 'cyan'],
     ['Colonies', s.colonies],
     ['Multicellular Organisms', s.multicellular, s.multicellular > 0 ? 'ember' : ''],
     ['Grazers / Hunters', `${s.herbivores} / ${s.carnivores}`],
     ['Avg Size Gene', s.avgSize.toFixed(2)],
     ['Avg Speed Gene', s.avgSpeed.toFixed(2)],
     ['Nutrient Soup Coverage', (s.foodCoverage * 100).toFixed(1) + '%'],
-    ['Deepest Generation', s.maxGeneration || 1, 'cyan'],
+    ['Deepest Generation', s.maxGeneration || 1, 'mineral'],
   ];
   statGrid.innerHTML = rows.map(r => `<div class="k">${r[0]}</div><div class="v ${r[2] || ''}">${r[1]}</div>`).join('');
   document.getElementById('dayLabel').textContent = `Day ${Math.floor(world.tickCount / 60)} · Tick ${world.tickCount} · Gen ${s.maxGeneration || 1}`;
@@ -1162,6 +1464,7 @@ document.getElementById('resetBtn').addEventListener('click', () => {
   world.food = new FoodGrid(world.width, world.height, 20);
   world.tickCount = 0;
   world.history = [];
+  world.cladeTree.clear();
   loggedEvents.length = 0;
   eventLog.innerHTML = '';
   selected = null;
@@ -1191,14 +1494,14 @@ tempSlider.addEventListener('input', () => { world.params.tempFactor = parseFloa
 sexSlider.addEventListener('input', () => { world.params.sexualRatio = parseFloat(sexSlider.value); syncSliderLabels(); });
 syncSliderLabels();
 
-// Disaster Buttons
+// Disaster & Intervention Buttons
 document.getElementById('extinctionBtn').addEventListener('click', () => {
   world.massExtinction(0.75);
   world.events.push({ tick: world.tickCount, text: 'Mass extinction: three out of four cells perish.' });
 });
 document.getElementById('bloomBtn').addEventListener('click', () => {
   for (let i = 0; i < world.food.density.length; i++) world.food.density[i] = Math.min(1, world.food.density[i] + 0.45);
-  world.events.push({ tick: world.tickCount, text: 'Nutrient bloom: organic soup surges across the ocean floor.' });
+  world.events.push({ tick: world.tickCount, text: 'Nutrient bloom: organic soup surges across the seabed.' });
 });
 document.getElementById('stormBtn').addEventListener('click', () => {
   const prev = world.params.mutationRate;
@@ -1214,17 +1517,21 @@ document.getElementById('stormBtn').addEventListener('click', () => {
 });
 document.getElementById('surgeBtn').addEventListener('click', () => {
   for (const v of world.food.vents) v.heat *= 1.8;
-  world.events.push({ tick: world.tickCount, text: 'Hydrothermal vent surge: deep seabed erupts with mineral energy.' });
+  world.events.push({ tick: world.tickCount, text: 'Hydrothermal vent surge: seabed erupts with mineral energy.' });
   setTimeout(() => {
     for (const v of world.food.vents) v.heat /= 1.8;
   }, 12000);
 });
+document.getElementById('pheroBurstBtn').addEventListener('click', () => {
+  for (let i = 0; i < world.food.pheromones.length; i++) world.food.pheromones[i] = Math.min(1, world.food.pheromones[i] + 0.35);
+  world.events.push({ tick: world.tickCount, text: 'Pheromone plume release: ocean currents surge with signals.' });
+});
 
-// Neural Brain Reset & Pruning Buttons
+// Neural Brain Controls
 document.getElementById('resetBrainBtn').addEventListener('click', () => {
   if (selected && selected.alive) {
     selected.brain.reset();
-    world.events.push({ tick: world.tickCount, text: `Cell #${selected.id}'s neural network brain has been reset.` });
+    world.events.push({ tick: world.tickCount, text: `Cell #${selected.id}'s RNN brain has been reset.` });
     renderBrainGraph();
   }
 });
@@ -1235,6 +1542,38 @@ document.getElementById('pruneBrainBtn').addEventListener('click', () => {
     renderBrainGraph();
   }
 });
+
+// Phylogenetic Clade Tree Modal
+const cladeModal = document.getElementById('cladeModal');
+document.getElementById('cladeBtn').addEventListener('click', () => {
+  renderCladeTree();
+  cladeModal.style.display = 'flex';
+});
+document.getElementById('closeCladeModal').addEventListener('click', () => {
+  cladeModal.style.display = 'none';
+});
+
+function renderCladeTree() {
+  const container = document.getElementById('cladeGraph');
+  const nodes = Array.from(world.cladeTree.values());
+  nodes.sort((a, b) => b.count - a.count);
+
+  if (nodes.length === 0) {
+    container.innerHTML = '<p class="empty-note">No species recorded yet.</p>';
+    return;
+  }
+
+  container.innerHTML = nodes.map(n => `
+    <div class="clade-node" style="border-left-color: hsl(${n.hue.toFixed(0)},70%,55%)">
+      <div>
+        <strong>${n.name}</strong> <span style="color:var(--foam-dim); font-size:11px;">(Ancestor: ${n.parentName}, Originated t${n.originTick})</span>
+      </div>
+      <div>
+        <span class="badge ${n.count > 0 ? 'phase2' : ''}">${n.count} alive</span>
+      </div>
+    </div>
+  `).join('');
+}
 
 // Organism Click Selection
 canvas.addEventListener('click', (e) => {
@@ -1268,7 +1607,7 @@ function geneSliderHTML(key, value, idPrefix) {
 }
 
 function defaultSpawnGenome() {
-  return { size: 1, speed: 1, sense: 55, diet: 0.1, aggression: 0.15, colony: 0.2, membrane: 0.5, plasticity: 0.4, mutationRate: 0.1, hue: Math.random() * 360 };
+  return { size: 1, speed: 1, sense: 55, diet: 0.1, aggression: 0.15, colony: 0.2, membrane: 0.5, plasticity: 0.4, pheromoneRate: 0.2, mutationRate: 0.1, hue: Math.random() * 360, speciesName: 'Phyto-morphic' };
 }
 let spawnGenome = defaultSpawnGenome();
 
@@ -1276,7 +1615,7 @@ function renderInspector() {
   if (!selected || !selected.alive) {
     inspectorTitle.textContent = 'Introduce a genome';
     inspectorBody.innerHTML = `
-      <p class="empty-note">Design a cell by hand and release it into the ocean. Click any living cell in the water to inspect its brain & edit its genes.</p>
+      <p class="empty-note">Design a cell by hand and release it into Phase 2 ocean. Click any cell to follow & inspect its brain.</p>
       ${Object.keys(GENE_RANGES).map(k => geneSliderHTML(k, spawnGenome[k], 'spawn')).join('')}
       <div class="field">
         <label>Lineage Hue <span class="val" id="spawn_hue_val">${spawnGenome.hue.toFixed(0)}</span></label>
@@ -1302,7 +1641,7 @@ function renderInspector() {
     });
     document.getElementById('spawnAddBtn').addEventListener('click', () => {
       world.spawn(spawnGenome, undefined, undefined, 0.6);
-      world.events.push({ tick: world.tickCount, text: 'A custom hand-designed organism is released into the sea.' });
+      world.events.push({ tick: world.tickCount, text: 'A custom hand-designed organism is released into Phase 2 sea.' });
     });
     document.getElementById('spawnRandomBtn').addEventListener('click', () => {
       spawnGenome = defaultSpawnGenome();
@@ -1313,18 +1652,19 @@ function renderInspector() {
   }
 
   const o = selected;
-  inspectorTitle.innerHTML = `<span class="genome-swatch" style="background:hsl(${o.genome.hue.toFixed(0)},65%,58%)"></span>Cell #${o.id} (${o.role})`;
+  inspectorTitle.innerHTML = `<span class="genome-swatch" style="background:hsl(${o.genome.hue.toFixed(0)},65%,58%)"></span>${o.genome.speciesName} #${o.id}`;
   const energyPct = Math.round((o.energy / o.maxEnergy) * 100);
 
   inspectorBody.innerHTML = `
     <div class="stat-grid" style="margin-bottom:12px;">
+      <div class="k">Species</div><div class="v cyan">${o.genome.speciesName}</div>
+      <div class="k">Cell Morphotype</div><div class="v ember">${o.role}</div>
       <div class="k">Energy</div><div class="v">${energyPct}%</div>
       <div class="k">Age</div><div class="v">${o.age} ticks</div>
       <div class="k">Generation</div><div class="v">${o.generation}</div>
       <div class="k">Offspring count</div><div class="v">${o.offspringCount}</div>
       <div class="k">Predatory Kills</div><div class="v">${o.kills}</div>
-      <div class="k">Colony members</div><div class="v">${o.colonyMemberCount}</div>
-      <div class="k">Cell Role</div><div class="v ember">${o.role}</div>
+      <div class="k">Spring-Joint Links</div><div class="v">${o.bondedPartners.length}</div>
     </div>
     ${Object.keys(GENE_RANGES).map(k => geneSliderHTML(k, o.genome[k], 'sel')).join('')}
     <div class="field">
@@ -1332,11 +1672,12 @@ function renderInspector() {
       <input type="range" id="sel_hue" min="0" max="360" step="1" value="${o.genome.hue}">
     </div>
     <div class="row-btns">
+      <button class="btn primary" id="followCellBtn">${followMode ? 'Stop Following' : 'Follow Cell'}</button>
       <button class="btn" id="cloneBtn">Clone with mutation</button>
-      <button class="btn warn" id="mateBtn">Mate with partner</button>
+      <button class="btn warn" id="mateBtn">Mate partner</button>
       <button class="btn danger" id="removeBtn">Remove cell</button>
     </div>
-    <p class="hint">Adjusting sliders edits this cell's traits live in the ocean.</p>`;
+    <p class="hint">Adjusting sliders edits this cell's traits live in Phase 2 ocean.</p>`;
 
   Object.keys(GENE_RANGES).forEach(k => {
     const el = document.getElementById('sel_' + k);
@@ -1351,22 +1692,32 @@ function renderInspector() {
     o.genome.hue = parseFloat(e.target.value);
     document.getElementById('sel_hue_val').textContent = o.genome.hue.toFixed(0);
   });
+
+  document.getElementById('followCellBtn').addEventListener('click', () => {
+    followMode = !followMode;
+    followBtn.textContent = followMode ? 'Follow Cell: ON' : 'Follow Cell: OFF';
+    if (followMode) followBtn.classList.add('active'); else followBtn.classList.remove('active');
+    renderInspector();
+  });
+
   document.getElementById('cloneBtn').addEventListener('click', () => {
-    const child = world.spawn(mutateGenome(o.genome, world.params.mutationRate), o.x, o.y, 0.5, o.brain);
+    const child = world.spawn(mutateGenome(o.genome, world.params.mutationRate), o.x, o.y, 0.5, o.brain, o.id);
     world.events.push({ tick: world.tickCount, text: `Cell #${o.id} cloned with mutative variation.` });
   });
+
   document.getElementById('mateBtn').addEventListener('click', () => {
     const nearby = world.organisms.filter(other => other !== o && other.alive && dist2(o.x, o.y, other.x, other.y) < 120 * 120);
     if (nearby.length > 0) {
       const partner = nearby[0];
       const childGenome = crossoverGenome(o.genome, partner.genome, world.params.mutationRate);
       const childBrain = o.brain.crossover(partner.brain, world.params.mutationRate);
-      world.spawn(childGenome, (o.x + partner.x) / 2, (o.y + partner.y) / 2, 0.55, childBrain);
+      world.spawn(childGenome, (o.x + partner.x) / 2, (o.y + partner.y) / 2, 0.55, childBrain, o.id);
       world.events.push({ tick: world.tickCount, text: `Cell #${o.id} & Cell #${partner.id} mated via sexual crossover.` });
     } else {
-      world.events.push({ tick: world.tickCount, text: `No compatible partner nearby to mate with Cell #${o.id}.` });
+      world.events.push({ tick: world.tickCount, text: `No partner nearby to mate with Cell #${o.id}.` });
     }
   });
+
   document.getElementById('removeBtn').addEventListener('click', () => {
     o.alive = false;
     selected = null;

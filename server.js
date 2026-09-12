@@ -1,10 +1,10 @@
-// ===== Zero-Dependency Node.js HTTP Server for Early Earth Observer =====
+// ===== Zero-Dependency Node.js HTTP Server for Phase 2 Early Earth Observer =====
 
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
 const MIME_TYPES = {
@@ -22,16 +22,14 @@ const server = http.createServer((req, res) => {
   let reqUrl = req.url.split('?')[0];
   if (reqUrl === '/') reqUrl = '/index.html';
 
-  // API route
   if (reqUrl === '/api/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', engine: 'Primordial Neural Simulation v2.0' }));
+    res.end(JSON.stringify({ status: 'ok', engine: 'Primordial Neural Simulation Phase 2 (RNN)' }));
     return;
   }
 
   const filePath = path.normalize(path.join(PUBLIC_DIR, reqUrl));
 
-  // Security check: path traversal prevention
   if (!filePath.startsWith(PUBLIC_DIR)) {
     res.writeHead(403, { 'Content-Type': 'text/plain' });
     res.end('403 Forbidden');
@@ -56,7 +54,7 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, () => {
   console.log(`====================================================`);
-  console.log(`   Primordial Sea Artificial Life Observatory       `);
+  console.log(`   Primordial Sea Artificial Life Observatory (Phase 2)`);
   console.log(`   Running on http://localhost:${PORT}             `);
   console.log(`====================================================`);
 });
