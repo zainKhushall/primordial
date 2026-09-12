@@ -1,4 +1,4 @@
-// ===== Phase 2 Primordial Sea — Engine Entry Point =====
+// ===== Phase 3 Primordial Sea — Engine Entry Point =====
 
 const { GENE_RANGES, GENE_LABELS, clamp, lerp, gaussian, dist2, hueDiff, generateSpeciesName, randomGenome, mutateGenome, crossoverGenome, exportGenomeJSON, importGenomeJSON } = require('./src/engine/genome');
 const { NeuralNetwork } = require('./src/engine/brain');

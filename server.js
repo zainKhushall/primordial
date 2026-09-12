@@ -1,10 +1,10 @@
-// ===== Zero-Dependency Node.js HTTP Server for Phase 2 Early Earth Observer =====
+// ===== Zero-Dependency Node.js HTTP Server for Phase 3 Early Earth Observer =====
 
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3002;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
 const MIME_TYPES = {
@@ -24,7 +24,7 @@ const server = http.createServer((req, res) => {
 
   if (reqUrl === '/api/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', engine: 'Primordial Neural Simulation Phase 2 (RNN)' }));
+    res.end(JSON.stringify({ status: 'ok', engine: 'Primordial Neural Simulation Phase 3 (NEAT + Eras)' }));
     return;
   }
 
@@ -54,7 +54,7 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, () => {
   console.log(`====================================================`);
-  console.log(`   Primordial Sea Artificial Life Observatory (Phase 2)`);
+  console.log(`   Primordial Sea Artificial Life Observatory (Phase 3)`);
   console.log(`   Running on http://localhost:${PORT}             `);
   console.log(`====================================================`);
 });

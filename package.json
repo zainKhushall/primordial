@@ -1,7 +1,7 @@
 {
-  "name": "primordial-sea-neural-phase2",
-  "version": "2.0.0",
-  "description": "Phase 2 Early Earth Artificial Life Simulation with Recurrent Neural Memory, Physical Multicellular Morphologies & Phylogenetic Clade Trees.",
+  "name": "primordial-sea-neural-phase3",
+  "version": "3.0.0",
+  "description": "Phase 3 Early Earth Artificial Life Simulation with NEAT Brain Topology, Embryogenesis, Endosymbiosis, Geological Eras & Atmospheric Chemistry.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -12,10 +12,11 @@
   "keywords": [
     "artificial-life",
     "simulation",
-    "recurrent-neural-network",
-    "evolution",
-    "multicellular",
-    "phylogenetics"
+    "neat-neural-network",
+    "embryogenesis",
+    "endosymbiosis",
+    "geological-eras",
+    "atmospheric-chemistry"
   ],
   "author": "Antigravity AI",
   "license": "MIT"
