@@ -1,4 +1,4 @@
-// ===== Phase 2 Environment Module: Multi-Biome, Day/Night Cycle & Pheromone Grid =====
+// ===== Phase 3 Environment Module: Geological Eras & Atmospheric Chemistry =====
 
 const { clamp } = require('./genome');
 
@@ -8,17 +8,25 @@ class FoodGrid {
     this.cols = Math.ceil(width / cellSize);
     this.rows = Math.ceil(height / cellSize);
     this.density = new Float32Array(this.cols * this.rows);
-    this.pheromones = new Float32Array(this.cols * this.rows); // Pheromone signal layer
+    this.pheromones = new Float32Array(this.cols * this.rows);
+    this.toxins = new Float32Array(this.cols * this.rows); // Toxin cloud layer
     this.vents = [];
+
+    // Phase 3 Atmospheric & Oceanic Chemistry
+    this.o2Level = 0.05;   // Oxygen level [0, 1]
+    this.co2Level = 0.85;  // Carbon dioxide [0, 1]
+    this.h2sLevel = 0.65;  // Hydrogen sulfide [0, 1]
+    this.currentEra = 'Hadean Volcanic'; // 'Hadean Volcanic', 'Archean Oxygenation', 'Proterozoic Snowball', 'Cambrian Explosion'
 
     // Initialize nutrient density
     for (let i = 0; i < this.density.length; i++) {
       this.density[i] = 0.16 + Math.random() * 0.24;
       this.pheromones[i] = 0;
+      this.toxins[i] = 0;
     }
 
-    // Abyssal hydrothermal vents
-    const ventCount = 5;
+    // Abyssal vents
+    const ventCount = 6;
     for (let i = 0; i < ventCount; i++) {
       this.vents.push({
         cx: Math.floor(Math.random() * this.cols),
@@ -37,25 +45,50 @@ class FoodGrid {
     return { cx, cy };
   }
 
-  // Get environment biome type at coordinate
   biomeAt(x, y) {
     const relY = y / (this.rows * this.cellSize);
-    if (relY < 0.35) return 'photic'; // Sunlit Surface
-    if (relY < 0.70) return 'pelagic'; // Open Water Drift
-    return 'abyssal'; // Deep Vents
+    if (relY < 0.35) return 'photic';
+    if (relY < 0.70) return 'pelagic';
+    return 'abyssal';
   }
 
-  // Diurnal Day/Night Cycle light multiplier
+  // Update Geological Eras & Atmospheric Gas Balance based on simulation time
+  updateEra(tickCount = 0, plantCoverage = 0.3) {
+    if (tickCount < 1500) {
+      this.currentEra = 'Hadean Volcanic';
+      this.o2Level = clamp(0.04 + plantCoverage * 0.1, 0, 1);
+      this.co2Level = 0.85;
+      this.h2sLevel = 0.65;
+    } else if (tickCount < 3500) {
+      this.currentEra = 'Archean Oxygenation';
+      this.o2Level = clamp(0.2 + (tickCount - 1500) * 0.0002 + plantCoverage * 0.3, 0, 1);
+      this.co2Level = clamp(0.7 - (tickCount - 1500) * 0.00015, 0.1, 1);
+      this.h2sLevel = clamp(0.5 - (tickCount - 1500) * 0.00015, 0.05, 1);
+    } else if (tickCount < 5500) {
+      this.currentEra = 'Proterozoic Snowball';
+      this.o2Level = 0.45;
+      this.co2Level = 0.3;
+      this.h2sLevel = 0.15;
+    } else {
+      this.currentEra = 'Cambrian Explosion';
+      this.o2Level = 0.85;
+      this.co2Level = 0.35;
+      this.h2sLevel = 0.08;
+    }
+  }
+
   lightFactor(cy, tickCount = 0) {
+    // If Snowball Earth, surface ice layer reduces light factor
+    const iceBlock = this.currentEra === 'Proterozoic Snowball' ? 0.35 : 1.0;
     const dayNightOscillation = 0.3 + 0.7 * Math.pow(Math.sin((tickCount * Math.PI) / 120), 2);
     const depthFactor = 0.2 + 0.8 * (1 - cy / this.rows);
-    return dayNightOscillation * depthFactor;
+    return dayNightOscillation * depthFactor * iceBlock;
   }
 
   grow(growthRate = 0.011, tickCount = 0) {
-    const { cols, rows, density, pheromones } = this;
+    this.updateEra(tickCount, this.coverage());
+    const { cols, rows, density, pheromones, toxins } = this;
 
-    // 1. Photic plant growth with Day/Night cycle
     for (let cy = 0; cy < rows; cy++) {
       const light = this.lightFactor(cy, tickCount);
       const rowBase = cy * cols;
@@ -64,12 +97,12 @@ class FoodGrid {
         const d = density[i];
         density[i] = clamp(d + growthRate * light * d * (1 - d) + growthRate * 0.022 * light, 0, 1);
 
-        // Pheromone decay
-        pheromones[i] *= 0.96;
+        pheromones[i] *= 0.95;
+        toxins[i] *= 0.94; // Toxin decay
       }
     }
 
-    // 2. Hydrothermal vent chemosynthesis
+    // Vent chemosynthesis
     for (const vent of this.vents) {
       for (let dy = -vent.r; dy <= vent.r; dy++) {
         for (let dx = -vent.r; dx <= vent.r; dx++) {
@@ -77,14 +110,12 @@ class FoodGrid {
           if (cx < 0 || cy < 0 || cx >= cols || cy >= rows) continue;
           if (dx * dx + dy * dy > vent.r * vent.r) continue;
           const i = this.idx(cx, cy);
-          if (density[i] < 0.68) {
-            density[i] = Math.min(0.68, density[i] + 0.038 * vent.heat);
-          }
+          if (density[i] < 0.68) density[i] = Math.min(0.68, density[i] + 0.038 * vent.heat);
         }
       }
     }
 
-    // 3. Fluid nutrient diffusion
+    // Fluid nutrient diffusion
     const samples = Math.floor(cols * rows * 0.05);
     for (let s = 0; s < samples; s++) {
       const cx = (Math.random() * cols) | 0;
@@ -124,9 +155,15 @@ class FoodGrid {
     this.pheromones[i] = Math.min(1.0, this.pheromones[i] + amount);
   }
 
-  pheromoneAt(x, y) {
+  depositToxin(x, y, amount) {
     const { cx, cy } = this.cellAt(x, y);
-    return this.pheromones[this.idx(cx, cy)];
+    const i = this.idx(cx, cy);
+    this.toxins[i] = Math.min(1.0, this.toxins[i] + amount);
+  }
+
+  toxinAt(x, y) {
+    const { cx, cy } = this.cellAt(x, y);
+    return this.toxins[this.idx(cx, cy)];
   }
 
   coverage() {
@@ -145,10 +182,7 @@ class FoodGrid {
         if (cx < 0 || cy < 0 || cx >= this.cols || cy >= this.rows) continue;
         const i = cy * this.cols + cx;
         const d = this.density[i];
-        if (d > bestD) {
-          bestD = d;
-          best = { x: (cx + 0.5) * this.cellSize, y: (cy + 0.5) * this.cellSize, d };
-        }
+        if (d > bestD) { bestD = d; best = { x: (cx + 0.5) * this.cellSize, y: (cy + 0.5) * this.cellSize, d }; }
       }
     }
     return best;

@@ -1,4 +1,4 @@
-// ===== Phase 2 World Engine: Ecosystem Simulation, Clade Trees, Fossils & Natural Selection =====
+// ===== Phase 3 World Engine: Geological Eras, AI Ecosystem Naturalist & Selection =====
 
 const { Organism } = require('./organism');
 const { FoodGrid } = require('./environment');
@@ -50,9 +50,8 @@ class World {
     this.tickCount = 0;
     this.MULTICELLULAR_THRESHOLD = 7;
 
-    // Phase 2 Phylogenetic Clade Tree & Fossil Record
-    this.cladeTree = new Map(); // speciesName -> { name, parentName, originTick, color, count, totalEver }
-    this.fossilRecord = []; // Top 20 historical organisms
+    this.cladeTree = new Map();
+    this.fossilRecord = [];
 
     this.params = Object.assign({
       foodGrowth: 0.011,
@@ -66,10 +65,12 @@ class World {
     this.stats = {
       population: 0, species: 0, colonies: 0, multicellular: 0,
       avgSize: 0, avgSpeed: 0, herbivores: 0, carnivores: 0,
-      foodCoverage: 0, maxGeneration: 1, topSpecies: 'None'
+      foodCoverage: 0, maxGeneration: 1, topSpecies: 'None',
+      era: 'Hadean Volcanic', o2: '5%', co2: '85%'
     };
     this.history = [];
     this._extinctFor = 0;
+    this._lastNaturalistReport = 0;
   }
 
   registerSpecies(speciesName, parentName, hue) {
@@ -90,7 +91,8 @@ class World {
     const ancestorGenome = {
       size: 0.85, speed: 0.9, sense: 50, diet: 0.05,
       aggression: 0.08, colony: 0.15, membrane: 0.5,
-      plasticity: 0.4, pheromoneRate: 0.2, mutationRate: 0.1, hue: Math.random() * 360,
+      plasticity: 0.4, pheromoneRate: 0.2, toxinGene: 0.1, endoCapacity: 0.5,
+      mutationRate: 0.1, hue: Math.random() * 360,
     };
     ancestorGenome.speciesName = generateSpeciesName(ancestorGenome);
     this.registerSpecies(ancestorGenome.speciesName, 'Abiogenesis', ancestorGenome.hue);
@@ -100,8 +102,7 @@ class World {
       this.registerSpecies(g.speciesName, ancestorGenome.speciesName, g.hue);
       const x = Math.random() * this.width;
       const y = Math.random() * this.height;
-      const org = new Organism(x, y, g, undefined, 1, undefined);
-      this.organisms.push(org);
+      this.organisms.push(new Organism(x, y, g, undefined, 1, undefined));
     }
   }
 
@@ -121,19 +122,41 @@ class World {
   }
 
   massExtinction(fraction = 0.75) {
-    for (const o of this.organisms) {
-      if (Math.random() < fraction) o.alive = false;
+    for (const o of this.organisms) if (Math.random() < fraction) o.alive = false;
+  }
+
+  // AI Automated Ecosystem Naturalist Report
+  generateNaturalistReport() {
+    if (this.tickCount - this._lastNaturalistReport < 350) return;
+    this._lastNaturalistReport = this.tickCount;
+
+    const s = this.stats;
+    const era = this.food.currentEra;
+    let reportText = '';
+
+    if (this.tickCount === 1500) {
+      reportText = `[AI Naturalist] Great Archean Oxygenation Event begins! Oxygen levels rising.`;
+    } else if (this.tickCount === 3500) {
+      reportText = `[AI Naturalist] Proterozoic Snowball Earth era arrives! Ice sheets cover the photic surface.`;
+    } else if (this.tickCount === 5500) {
+      reportText = `[AI Naturalist] Cambrian Explosion! Optimal oxygenation sparks adaptive radiation.`;
+    } else if (s.multicellular > 2 && Math.random() < 0.5) {
+      reportText = `[AI Naturalist] Multicellular complexity surging: ${s.multicellular} organisms with spring tissue bodies active.`;
+    } else if (s.carnivores > s.herbivores && Math.random() < 0.5) {
+      reportText = `[AI Naturalist] Apex Predators dominant: Carnivores outweigh grazers in the ${era} era.`;
+    } else {
+      reportText = `[AI Naturalist] Species ${s.topSpecies} leads ecosystem diversity in ${era}.`;
     }
+
+    this.events.push({ tick: this.tickCount, text: reportText });
   }
 
   tick() {
     const W = this.width, H = this.height;
     const p = this.params;
 
-    // 1. Environment tick with Day/Night cycle & nutrient growth
     this.food.grow(p.foodGrowth, this.tickCount);
 
-    // 2. Spatial Hash Indexing
     const hash = new SpatialHash(W, H, 40);
     const alive = [];
     for (let i = 0; i < this.organisms.length; i++) {
@@ -141,7 +164,6 @@ class World {
       if (o.alive) { alive.push(o); hash.insert(o); }
     }
 
-    // 3. Multicellular Colony Union-Find
     const parent = new Map();
     const find = (o) => {
       let r = o;
@@ -199,37 +221,28 @@ class World {
       }
     }
 
-    // 4. Creature physical & neural updates
     for (let i = 0; i < alive.length; i++) alive[i].step(this.food, hash, W, H, p.tempFactor);
 
-    // 5. Reproduction & Natural Selection
     const newborns = [];
     for (let i = 0; i < alive.length; i++) {
       const o = alive[i];
       if (!o.alive) continue;
 
-      // Death check
       if (o.energy <= 0 || o.age > o.lifespan) {
         o.alive = false;
         this.food.deposit(o.x, o.y, 0.12 * o.genome.size);
 
-        // Fossil record archiving for high-performing organisms
         if (o.kills >= 3 || o.offspringCount >= 4 || o.age > 700) {
           this.fossilRecord.push({
-            id: o.id,
-            speciesName: o.genome.speciesName,
-            age: o.age,
-            kills: o.kills,
-            offspringCount: o.offspringCount,
-            generation: o.generation,
-            genome: Object.assign({}, o.genome),
+            id: o.id, speciesName: o.genome.speciesName,
+            age: o.age, kills: o.kills, offspringCount: o.offspringCount,
+            generation: o.generation, genome: Object.assign({}, o.genome),
           });
           if (this.fossilRecord.length > 25) this.fossilRecord.shift();
         }
         continue;
       }
 
-      // Reproduction check
       if (o.energy >= o.reproduceThreshold && o.reproCooldown <= 0 && (alive.length + newborns.length) < p.maxPopulation) {
         let childGenome, childBrain;
         let isSexual = false;
@@ -279,7 +292,6 @@ class World {
     this.organisms = alive.filter(o => o.alive).concat(newborns);
     this.tickCount++;
 
-    // Safety Abiogenesis
     if (this.organisms.length === 0) {
       this._extinctFor++;
       if (this._extinctFor > 80) {
@@ -295,6 +307,7 @@ class World {
       this._updateStats();
       this.history.push({ t: this.tickCount, pop: this.organisms.length });
       if (this.history.length > 250) this.history.shift();
+      this.generateNaturalistReport();
     }
   }
 
@@ -302,8 +315,10 @@ class World {
     const orgs = this.organisms;
     const s = this.stats;
     s.population = orgs.length;
+    s.era = this.food.currentEra;
+    s.o2 = (this.food.o2Level * 100).toFixed(0) + '%';
+    s.co2 = (this.food.co2Level * 100).toFixed(0) + '%';
 
-    // Reset clade tree population counts
     for (const node of this.cladeTree.values()) node.count = 0;
 
     if (orgs.length === 0) {
@@ -340,7 +355,6 @@ class World {
       }
     }
 
-    // Determine top dominant species
     let topName = 'None', maxCount = 0;
     for (const node of this.cladeTree.values()) {
       if (node.count > maxCount) {

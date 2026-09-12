@@ -1,4 +1,4 @@
-// ===== Phase 2 Genome Module: Trait Definitions, Taxonomy & Sexual Crossover =====
+// ===== Phase 3 Genome Module: Embryogenesis Body Plan Genes, Toxin Genes & Taxonomy =====
 
 const GENE_RANGES = {
   size: [0.4, 3.2],
@@ -10,6 +10,8 @@ const GENE_RANGES = {
   membrane: [0.2, 1.0],
   plasticity: [0, 1],
   pheromoneRate: [0, 1],
+  toxinGene: [0, 1],       // Venom secretion / poison defense gene
+  endoCapacity: [0, 1],    // Endosymbiont organelle host capacity
   mutationRate: [0.02, 0.35],
 };
 
@@ -23,6 +25,8 @@ const GENE_LABELS = {
   membrane: 'Membrane Shield',
   plasticity: 'Brain Plasticity',
   pheromoneRate: 'Pheromone Signal',
+  toxinGene: 'Toxin Secretion',
+  endoCapacity: 'Endosymbiosis Host',
   mutationRate: 'Genetic Instability',
 };
 
@@ -46,17 +50,17 @@ function hueDiff(a, b) {
   return d > 180 ? 360 - d : d;
 }
 
-// Generate binomial species nomenclature (e.g. "Phyto-microbia", "Velox-carnis")
 function generateSpeciesName(genome) {
-  const prefixes = ['Phyto', 'Micro', 'Velox', 'Macro', 'Colonio', 'Carnis', 'Abysso', 'Pelag', 'Soma', 'Bio'];
+  const prefixes = ['Phyto', 'Micro', 'Velox', 'Macro', 'Colonio', 'Carnis', 'Toxic', 'Abysso', 'Pelag', 'Endo'];
   const suffixes = ['morphic', 'bion', 'vorus', 'dermal', 'spire', 'plax', 'cyte', 'naut', 'stoma', 'troph'];
 
   let pIndex = 0;
-  if (genome.diet > 0.4) pIndex = 5; // Carnis
+  if (genome.toxinGene > 0.45) pIndex = 6; // Toxic
+  else if (genome.diet > 0.4) pIndex = 5; // Carnis
   else if (genome.colony > 0.5) pIndex = 4; // Colonio
   else if (genome.speed > 1.6) pIndex = 2; // Velox
   else if (genome.size > 2.0) pIndex = 3; // Macro
-  else pIndex = 0; // Phyto
+  else pIndex = 0;
 
   let sIndex = Math.floor((genome.hue / 360) * suffixes.length) % suffixes.length;
   return `${prefixes[pIndex]}-${suffixes[sIndex]}`;
@@ -85,13 +89,8 @@ function mutateGenome(genome, mutRate) {
   }
   const oldHue = g.hue;
   g.hue = (g.hue + gaussian() * rate * 35 + 360) % 360;
-
-  // Re-evaluate species name if significant drift occurred
-  if (Math.abs(g.hue - oldHue) > 30 || Math.random() < 0.08) {
-    g.speciesName = generateSpeciesName(g);
-  } else {
-    g.speciesName = genome.speciesName || generateSpeciesName(g);
-  }
+  if (Math.abs(g.hue - oldHue) > 30 || Math.random() < 0.08) g.speciesName = generateSpeciesName(g);
+  else g.speciesName = genome.speciesName || generateSpeciesName(g);
   return g;
 }
 
@@ -109,9 +108,7 @@ function crossoverGenome(parentA, parentB, mutRate) {
   return mutateGenome(child, effectiveMutRate);
 }
 
-function exportGenomeJSON(genome) {
-  return JSON.stringify(genome, null, 2);
-}
+function exportGenomeJSON(genome) { return JSON.stringify(genome, null, 2); }
 
 function importGenomeJSON(jsonString) {
   try {
