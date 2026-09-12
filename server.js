@@ -1,4 +1,4 @@
-// ===== Zero-Dependency Node.js HTTP Server for Phase 3 Early Earth Observer =====
+// ===== Zero-Dependency Node.js HTTP Server for Primordial Earth V4 =====
 
 const http = require('http');
 const fs = require('fs');
@@ -24,7 +24,7 @@ const server = http.createServer((req, res) => {
 
   if (reqUrl === '/api/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', engine: 'Primordial Neural Simulation Phase 3 (NEAT + Eras)' }));
+    res.end(JSON.stringify({ status: 'ok', engine: 'Primordial Earth V4 (Continent, Materials, Compound Vision, Hebbian)' }));
     return;
   }
 
@@ -52,9 +52,9 @@ const server = http.createServer((req, res) => {
   });
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`====================================================`);
-  console.log(`   Primordial Sea Artificial Life Observatory (Phase 3)`);
+  console.log(`   Primordial Earth Artificial Life Observatory (V4)`);
   console.log(`   Running on http://localhost:${PORT}             `);
   console.log(`====================================================`);
 });

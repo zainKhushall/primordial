@@ -1,38 +1,41 @@
-// ===== Phase 3 Environment Module: Geological Eras & Atmospheric Chemistry =====
+// ===== Primordial V4 Environment Module: Dual Biomes, Detritus Cycles & Atmospheric Chemistry =====
 
 const { clamp } = require('./genome');
 
 class FoodGrid {
-  constructor(width, height, cellSize = 20) {
+  constructor(width, height, cellSize = 40, terrain = null) {
+    this.width = width;
+    this.height = height;
     this.cellSize = cellSize;
     this.cols = Math.ceil(width / cellSize);
     this.rows = Math.ceil(height / cellSize);
     this.density = new Float32Array(this.cols * this.rows);
     this.pheromones = new Float32Array(this.cols * this.rows);
-    this.toxins = new Float32Array(this.cols * this.rows); // Toxin cloud layer
+    this.toxins = new Float32Array(this.cols * this.rows);
     this.vents = [];
+    this.terrain = terrain;
 
-    // Phase 3 Atmospheric & Oceanic Chemistry
-    this.o2Level = 0.05;   // Oxygen level [0, 1]
-    this.co2Level = 0.85;  // Carbon dioxide [0, 1]
-    this.h2sLevel = 0.65;  // Hydrogen sulfide [0, 1]
-    this.currentEra = 'Hadean Volcanic'; // 'Hadean Volcanic', 'Archean Oxygenation', 'Proterozoic Snowball', 'Cambrian Explosion'
+    // Atmospheric & Oceanic Chemistry
+    this.o2Level = 0.05;
+    this.co2Level = 0.85;
+    this.h2sLevel = 0.65;
+    this.currentEra = 'Hadean Volcanic';
 
     // Initialize nutrient density
     for (let i = 0; i < this.density.length; i++) {
-      this.density[i] = 0.16 + Math.random() * 0.24;
+      this.density[i] = 0.18 + Math.random() * 0.22;
       this.pheromones[i] = 0;
       this.toxins[i] = 0;
     }
 
-    // Abyssal vents
-    const ventCount = 6;
+    // Abyssal hydrothermal vents
+    const ventCount = 12;
     for (let i = 0; i < ventCount; i++) {
       this.vents.push({
         cx: Math.floor(Math.random() * this.cols),
-        cy: Math.floor((0.65 + Math.random() * 0.3) * this.rows),
-        r: 3 + Math.random() * 3.5,
-        heat: 0.8 + Math.random() * 0.4,
+        cy: Math.floor((0.55 + Math.random() * 0.4) * this.rows),
+        r: 3.5 + Math.random() * 4.0,
+        heat: 0.85 + Math.random() * 0.45,
       });
     }
   }
@@ -46,13 +49,20 @@ class FoodGrid {
   }
 
   biomeAt(x, y) {
+    if (this.terrain) {
+      const mat = this.terrain.getMaterial(x, y);
+      if (mat === 2) return 'land';
+      if (mat === 3) return 'mud';
+      if (mat === 4) return 'ice';
+      if (mat === 1) return 'shallow';
+      return 'abyssal';
+    }
     const relY = y / (this.rows * this.cellSize);
     if (relY < 0.35) return 'photic';
     if (relY < 0.70) return 'pelagic';
     return 'abyssal';
   }
 
-  // Update Geological Eras & Atmospheric Gas Balance based on simulation time
   updateEra(tickCount = 0, plantCoverage = 0.3) {
     if (tickCount < 1500) {
       this.currentEra = 'Hadean Volcanic';
@@ -78,27 +88,38 @@ class FoodGrid {
   }
 
   lightFactor(cy, tickCount = 0) {
-    // If Snowball Earth, surface ice layer reduces light factor
     const iceBlock = this.currentEra === 'Proterozoic Snowball' ? 0.35 : 1.0;
     const dayNightOscillation = 0.3 + 0.7 * Math.pow(Math.sin((tickCount * Math.PI) / 120), 2);
-    const depthFactor = 0.2 + 0.8 * (1 - cy / this.rows);
+    const depthFactor = 0.25 + 0.75 * (1 - cy / this.rows);
     return dayNightOscillation * depthFactor * iceBlock;
   }
 
-  grow(growthRate = 0.011, tickCount = 0) {
+  grow(growthRate = 0.012, tickCount = 0) {
     this.updateEra(tickCount, this.coverage());
-    const { cols, rows, density, pheromones, toxins } = this;
+    const { cols, rows, density, pheromones, toxins, terrain } = this;
 
     for (let cy = 0; cy < rows; cy++) {
       const light = this.lightFactor(cy, tickCount);
       const rowBase = cy * cols;
+
       for (let cx = 0; cx < cols; cx++) {
         const i = rowBase + cx;
-        const d = density[i];
-        density[i] = clamp(d + growthRate * light * d * (1 - d) + growthRate * 0.022 * light, 0, 1);
+        let d = density[i];
 
+        let soilMultiplier = 1.0;
+        if (terrain) {
+          const mat = terrain.materials[terrain.idx(
+            clamp(Math.floor((cx / cols) * terrain.cols), 0, terrain.cols - 1),
+            clamp(Math.floor((cy / rows) * terrain.rows), 0, terrain.rows - 1)
+          )];
+          if (mat === 3) soilMultiplier = 1.8; // Mud detritus blooms
+          else if (mat === 4) soilMultiplier = 0.2; // Ice freezing
+          else if (mat === 2) soilMultiplier = 1.2; // Land vegetation
+        }
+
+        density[i] = clamp(d + growthRate * light * soilMultiplier * d * (1 - d) + growthRate * 0.02 * light, 0, 1);
         pheromones[i] *= 0.95;
-        toxins[i] *= 0.94; // Toxin decay
+        toxins[i] *= 0.93;
       }
     }
 
@@ -110,13 +131,13 @@ class FoodGrid {
           if (cx < 0 || cy < 0 || cx >= cols || cy >= rows) continue;
           if (dx * dx + dy * dy > vent.r * vent.r) continue;
           const i = this.idx(cx, cy);
-          if (density[i] < 0.68) density[i] = Math.min(0.68, density[i] + 0.038 * vent.heat);
+          if (density[i] < 0.75) density[i] = Math.min(0.75, density[i] + 0.042 * vent.heat);
         }
       }
     }
 
     // Fluid nutrient diffusion
-    const samples = Math.floor(cols * rows * 0.05);
+    const samples = Math.floor(cols * rows * 0.04);
     for (let s = 0; s < samples; s++) {
       const cx = (Math.random() * cols) | 0;
       const cy = (Math.random() * rows) | 0;
@@ -128,7 +149,7 @@ class FoodGrid {
       if (dir === 0) nx++; else if (dir === 1) nx--; else if (dir === 2) ny++; else ny--;
       if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
       const j = ny * cols + nx;
-      const amt = nd * 0.055;
+      const amt = nd * 0.05;
       density[i] -= amt;
       density[j] = Math.min(1, density[j] + amt);
     }
