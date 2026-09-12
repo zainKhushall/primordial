@@ -14,7 +14,7 @@ assert(terrain.rows === 75, `Expected 75 rows, got ${terrain.rows}`);
 assert(terrain.stones.length > 50, `Expected >50 stones, got ${terrain.stones.length}`);
 
 // Test stone collision
-const stone = terrain.stones[0];
+const stone = terrain.stones.find(st => terrain.queryStonesNear(st.x, st.y, st.r + 50).length === 1) || terrain.stones[0];
 const col = terrain.resolveStoneCollision(stone.x, stone.y + stone.r - 2, 8, 0, -2);
 assert(col.collided === true, 'Expected stone collision');
 assert(col.y > stone.y + stone.r, 'Expected to be pushed out of stone');

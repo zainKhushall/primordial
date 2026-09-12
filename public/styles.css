@@ -591,3 +591,48 @@ input[type=range] {
   background: var(--deep2);
 }
 
+/* ===== Version 5 Extensions ===== */
+.badge.phase5 {
+  background: rgba(56, 176, 0, 0.22);
+  color: #70e000;
+  border-color: #38b000;
+  box-shadow: 0 0 14px rgba(112, 224, 0, 0.4);
+}
+
+.badge.yellow {
+  background: rgba(255, 209, 102, 0.18);
+  color: #ffd166;
+  border-color: #ffd166;
+}
+
+#nightToggleBtn.active {
+  background: rgba(155, 93, 229, 0.28);
+  border-color: var(--purple);
+  color: #d8b4fe;
+  box-shadow: 0 0 10px rgba(155, 93, 229, 0.35);
+}
+
+/* ===== Version 6 Extensions ===== */
+.badge.phase6 {
+  background: linear-gradient(135deg, rgba(230, 57, 70, 0.25), rgba(155, 93, 229, 0.35));
+  color: #f4a261;
+  border-color: #e76f51;
+  box-shadow: 0 0 16px rgba(231, 111, 81, 0.45);
+}
+
+.anomaly-tag {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  margin-left: 4px;
+  text-transform: uppercase;
+}
+.anomaly-tag.titan { background: #e63946; color: #fff; }
+.anomaly-tag.polycephaly { background: #9b5de5; color: #fff; }
+.anomaly-tag.albino { background: #e0fbfc; color: #1d3557; }
+.anomaly-tag.spiked_carapace { background: #f4a261; color: #000; }
+.anomaly-tag.chimera { background: linear-gradient(90deg, #ff007f, #00f0ff, #70e000); color: #000; }
+
+

@@ -1,4 +1,4 @@
-// ===== Zero-Dependency Node.js HTTP Server for Primordial Earth V4 =====
+// ===== Zero-Dependency Node.js HTTP Server for Primordial Earth V5 =====
 
 const http = require('http');
 const fs = require('fs');
@@ -24,7 +24,7 @@ const server = http.createServer((req, res) => {
 
   if (reqUrl === '/api/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', engine: 'Primordial Earth V4 (Continent, Materials, Compound Vision, Hebbian)' }));
+    res.end(JSON.stringify({ status: 'ok', engine: 'Primordial Earth V6 (Morphological Organogenesis, Deep Brain Evolution, Genetic Anomalies & Mutagen Zones)' }));
     return;
   }
 
@@ -52,9 +52,24 @@ const server = http.createServer((req, res) => {
   });
 });
 
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    const altPort = PORT + 1;
+    console.warn(`Port ${PORT} in use, trying alternate port ${altPort}...`);
+    server.listen(altPort, '0.0.0.0', () => {
+      console.log(`====================================================`);
+      console.log(`   Primordial Earth Artificial Life Observatory (V6)`);
+      console.log(`   Running on http://localhost:${altPort}           `);
+      console.log(`====================================================`);
+    });
+  } else {
+    throw err;
+  }
+});
+
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`====================================================`);
-  console.log(`   Primordial Earth Artificial Life Observatory (V4)`);
+  console.log(`   Primordial Earth Artificial Life Observatory (V6)`);
   console.log(`   Running on http://localhost:${PORT}             `);
   console.log(`====================================================`);
 });

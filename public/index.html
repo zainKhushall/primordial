@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
-<title>Primordial Earth V4 — Terrestrial Transition & Cognitive Evolution</title>
+<title>Primordial Earth V6 — Organogenesis, Neural Evolution & Element Interactions</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -13,8 +13,9 @@
   <div class="topbar">
     <div class="brand">
       <h1>Primordial Earth</h1>
-      <span class="badge phase4">Version 4</span>
+      <span class="badge phase6">Version 6 Organogenesis</span>
       <span class="badge purple" id="eraBadge">Hadean Volcanic</span>
+      <span class="badge yellow" id="timeBadge">☀️ Noon</span>
       <span class="badge cyan" id="zoomBadge">Zoom 1.0×</span>
       <span class="tick-label" id="dayLabel">Day 0 · Generation 1</span>
     </div>
@@ -31,6 +32,7 @@
         <button class="btn icon" id="zoomInBtn" title="Zoom In">+</button>
         <button class="btn icon" id="zoomOutBtn" title="Zoom Out">&minus;</button>
       </div>
+      <button class="btn active" id="nightToggleBtn">Night Shader: ON</button>
       <button class="btn" id="followBtn">Follow Cell: OFF</button>
       <button class="btn cyan" id="cladeBtn">Phylogenetic Tree</button>
       <button class="btn" id="resetCamBtn">Reset view</button>
@@ -53,7 +55,11 @@
           <button class="brush-btn" data-brush="ice" title="Paint Glacial Ice Sheet">❄️ Ice</button>
           <button class="brush-btn" data-brush="land" title="Raise Continental Land">🏜️ Land</button>
           <button class="brush-btn" data-brush="water" title="Carve Ocean Channel">🌊 Water</button>
-          <button class="brush-btn" data-brush="food" title="Seed Nutrient Bloom">🌿 Food</button>
+          <button class="brush-btn" data-brush="kelp" title="Plant Giant Kelp Forest">🌿 Kelp</button>
+          <button class="brush-btn" data-brush="moss" title="Plant Continental Moss">🌱 Moss</button>
+          <button class="brush-btn" data-brush="rain" title="Summon Rainstorm Front">⛈️ Rain</button>
+          <button class="brush-btn" data-brush="mutagen" title="Paint Mutagenic Radiation Zone">🧬 Mutagen</button>
+          <button class="brush-btn" data-brush="food" title="Seed Nutrient Bloom">✨ Food</button>
         </div>
       </div>
 
@@ -70,28 +76,26 @@
         <canvas id="minimapCanvas" width="180" height="135"></canvas>
       </div>
 
-      <div class="select-hint">Drag to Pan · Scroll to Zoom (0.15× to 12×) · Click tool to paint terrain or inspect</div>
+      <div class="select-hint">Drag to Pan · Scroll to Zoom (0.12× to 12×) · Click tool to sculpt living earth</div>
       <div class="day-night-indicator" id="dayNightBadge">Hadean Era · High Volcanic Sulfide</div>
 
       <!-- Microscope Mode Indicator -->
       <div class="microscope-indicator" id="microscopeBadge" style="display:none;">
-        🔬 <strong>Microscope View</strong>: Intracellular Organelles & Active Neural Synaptic Spikes
+        🔬 <strong>Microscope View</strong>: Mitosis Chromatin, Intracellular Organelles & Active Synaptic Spikes
       </div>
 
       <!-- Intro overlay -->
       <div class="overlay" id="introOverlay">
         <div class="card">
-          <h2>Primordial Earth V4: Terrestrial Transition & Cognitive Evolution</h2>
-          <p>Welcome to <strong>Version 4</strong> of the artificial life observatory! The world has expanded into a sprawling $4000 \times 3000$ dual-biome continent where organisms attempt the historic evolutionary leap from sea to land.</p>
-          <p>Key Version 4 Innovations:
-            <br>• <strong>Massive Map & Natural Elements</strong>: Traverse oceans, continents, solid stone boulders, viscous mudflats, and slick glacial ice sheets.
-            <br>• <strong>Infinite Multi-Scale Zoom</strong>: Zoom out to observe the entire continent ($0.15\times$), or zoom into microscopic scale ($12\times$) to watch pulsating nucleus, mitochondria, and live synaptic firing.
-            <br>• <strong>Compound Raycast Vision & Occlusion</strong>: Directional multi-ray vision detects prey, predators, and food while allowing stealth behind stones.
-            <br>• <strong>Lifelong Neuroplasticity & Drives</strong>: Hebbian learning strengthens synapses in real-time on reward and adapts to pain, guided by internal homeostatic drives (Hunger, Thirst, Fear, Mating).
-            <br>• <strong>Amphibious Transition Genetics</strong>: Organisms evolve moisture retention cuticles and limb crawling mechanics to colonize the dry mainland.
-            <br>• <strong>Sandbox God Tools</strong>: Use the floating palette to sculpt terrain, place stones, or trigger blooms live!
+          <h2>Primordial Earth V6: Organogenesis & Neuro-Evolution</h2>
+          <p>Welcome to <strong>Version 6</strong>! Life has crossed the evolutionary threshold from single-cell clusters into <strong>articulated multicellular animals with dynamic evolving brains</strong>:</p>
+          <p>Key Version 6 Breakthroughs:
+            <br>• <strong>Genetically Driven Segmented Anatomy</strong>: Organisms evolve articulated chitin carapaces ($1 - 8$ body segments), jointed walking legs with real stepping cycles on land, undulating swimming fins in ocean, and head antennae & hunting jaws.
+            <br>• <strong>Dynamic Deep Brain Evolution</strong>: Neural networks grow! Sensory inputs expand from 16 up to 24 channels (Acoustic, Barometric, Thermal, Mineral), hidden layers deepen with a secondary layer ($H_2$), and action outputs expand up to 11 (Vocalize, Sprint, Burrow, Camouflage).
+            <br>• <strong>Homologous Crossover & Genetic Anomalies</strong>: True chromosomal meiosis crossover with rare macro-mutations: <strong>Titans (Gigantism)</strong>, <strong>Polycephaly (Twin Heads)</strong>, <strong>Albino Stealth</strong>, <strong>Spiked Carapace Recoil</strong>, and <strong>Rainbow Chimerism</strong>.
+            <br>• <strong>Deep Natural Element Interactions</strong>: Scrape stone boulders to synthesize calcium shell armor, burrow into mudflats to hide and filter detritus, and slide across glacial sheets.
           </p>
-          <button class="btn primary" id="beginBtn">Begin Observation</button>
+          <button class="btn primary" id="beginBtn">Begin V6 Observation</button>
         </div>
       </div>
     </div>
@@ -159,12 +163,13 @@
       <div class="panel">
         <h2>Terrain & Ecology Legend</h2>
         <div class="legend">
-          <div class="item"><span class="swatch" style="border-radius:50%;background:#504432"></span>🪨 Solid Stone Boulders: Block movement & vision</div>
+          <div class="item"><span class="swatch" style="border-radius:50%;background:#38b000"></span>🌿 Living Kelp & Moss: Photosynthesis & O₂ output</div>
+          <div class="item"><span class="swatch" style="border-radius:50%;background:#e63946"></span>🍖 Carcasses & Bone Fossils: Scavenger carrion</div>
+          <div class="item"><span class="swatch" style="border-radius:50%;background:#504432"></span>🪨 Solid Stone Boulders: Collision & shelter</div>
           <div class="item"><span class="swatch" style="background:#282015"></span>🪵 Detritus Mudflat: High friction & rich food</div>
           <div class="item"><span class="swatch" style="background:#3a2f20"></span>🏜️ Continental Land: Requires moisture retention</div>
           <div class="item"><span class="swatch" style="background:#2b4458"></span>❄️ Glacial Ice Sheet: Low friction sliding, freezing</div>
           <div class="item"><span class="swatch" style="background:#12383c"></span>🌊 Ocean Shallows & Depths: Buoyant aquatic realm</div>
-          <div class="item"><span class="swatch" style="border-radius:50%;background:hsl(150,65%,55%)"></span>Creature color: Genetic lineage marker</div>
         </div>
       </div>
 
