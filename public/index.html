@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>Primordial — Early Earth Neural Evolution Observatory</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+
+  <!-- Top bar controls -->
+  <div class="topbar">
+    <div class="brand">
+      <h1>Primordial Sea</h1>
+      <span class="badge">Neural v2.0</span>
+      <span class="tick-label" id="dayLabel">Day 0 · Generation 1</span>
+    </div>
+    <div class="controls">
+      <button class="btn primary" id="playPauseBtn">Pause</button>
+      <div class="seg" id="speedSeg">
+        <button class="btn active" data-speed="1">1×</button>
+        <button class="btn" data-speed="2">2×</button>
+        <button class="btn" data-speed="4">4×</button>
+        <button class="btn" data-speed="8">8×</button>
+        <button class="btn" data-speed="16">MAX</button>
+      </div>
+      <button class="btn" id="resetCamBtn">Reset view</button>
+      <button class="btn warn" id="resetBtn">Restart ocean</button>
+    </div>
+  </div>
+
+  <!-- Main layout -->
+  <div class="main">
+    <div class="stage" id="stage">
+      <canvas id="sea"></canvas>
+      <div class="select-hint">Click any organism to inspect its brain, genes & neural activations · Scroll to zoom, drag to pan</div>
+
+      <!-- Intro overlay -->
+      <div class="overlay" id="introOverlay">
+        <div class="card">
+          <h2>An early ocean, seen through a neural lens</h2>
+          <p>Over sixty unicellular organisms drift in a shallow primordial ocean. Green nutrient soup spreads across the upper photic zone, while deep-sea hydrothermal vents feed chemosynthetic life from below.</p>
+          <p>Each organism possesses an evolvable <strong>Mini Neural Network Brain</strong> mapping sensory inputs (food, prey, predators, kin, energy) directly to motor thrust, predation attacks, and colony adhesion. Brain weights and physical genes evolve across generations through <strong>asexual mitosis</strong>, <strong>sexual crossover</strong>, and <strong>local adaptive learning</strong>.</p>
+          <p>Organisms can form sticky colonies and transition into <strong>specialized multicellular creatures</strong> (feeders, defenders, reproducers, navigators). Click any organism to inspect its real-time neural network wiring diagrams, edit its genome, or trigger environmental disasters.</p>
+          <button class="btn primary" id="beginBtn">Begin observing</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sidebar controls & telemetry -->
+    <div class="sidebar">
+      <div class="panel">
+        <h2>Readings</h2>
+        <div class="stat-grid" id="statGrid"></div>
+        <canvas id="popChart" width="290" height="56"></canvas>
+        <p class="hint">Population history, sampled over recent simulation ticks.</p>
+      </div>
+
+      <!-- Neural Network Brain Visualizer -->
+      <div class="panel" id="brainPanel">
+        <h2>Brain Inspector <span class="sub-tag" id="brainTargetLabel">No cell selected</span></h2>
+        <canvas id="brainCanvas" width="290" height="150"></canvas>
+        <div class="brain-actions" id="brainActions" style="display:none; margin-top:8px;">
+          <div class="row-btns">
+            <button class="btn warn" id="resetBrainBtn">Reset neural weights</button>
+            <button class="btn" id="pruneBrainBtn">Prune weak synapses</button>
+          </div>
+          <p class="hint">Blue synapses indicate positive excitation weights; red indicates inhibition. Node glow represents live activation.</p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Catastrophes & Interventions</h2>
+        <div class="event-btns">
+          <button class="btn danger" id="extinctionBtn">Trigger mass extinction</button>
+          <button class="btn" id="bloomBtn">Trigger nutrient bloom</button>
+          <button class="btn" id="stormBtn">Trigger mutation storm</button>
+          <button class="btn warn" id="surgeBtn">Trigger thermal vent surge</button>
+        </div>
+        <div class="event-log" id="eventLog"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Environmental Conditions</h2>
+        <div class="field">
+          <label>Mutation rate <span class="val" id="mutVal"></span></label>
+          <input type="range" id="mutSlider" min="0.02" max="0.35" step="0.01">
+        </div>
+        <div class="field">
+          <label>Nutrient growth <span class="val" id="growVal"></span></label>
+          <input type="range" id="growSlider" min="0.003" max="0.03" step="0.001">
+        </div>
+        <div class="field">
+          <label>Water temperature <span class="val" id="tempVal"></span></label>
+          <input type="range" id="tempSlider" min="0.6" max="1.6" step="0.02">
+        </div>
+        <div class="field">
+          <label>Sexual mating ratio <span class="val" id="sexVal"></span></label>
+          <input type="range" id="sexSlider" min="0.0" max="0.8" step="0.05">
+        </div>
+        <p class="hint">Higher temperature increases basal metabolic energy burn.</p>
+      </div>
+
+      <div class="panel" id="inspectorPanel">
+        <h2 id="inspectorTitle">Introduce a genome</h2>
+        <div id="inspectorBody"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Reading the water</h2>
+        <div class="legend">
+          <div class="item"><span class="swatch" style="border-radius:50%;background:hsl(150,65%,55%);border:1px solid rgba(0,0,0,.3)"></span>Lineage color drifts with genetic hue distance</div>
+          <div class="item"><span class="swatch" style="border-radius:50%;background:#8fae5e;opacity:.7"></span>Cell radius scales with size gene</div>
+          <div class="item"><span class="swatch" style="background:linear-gradient(90deg,rgba(150,180,90,.15),rgba(150,180,90,.9))"></span>Green haze: organic nutrient soup</div>
+          <div class="item"><span class="swatch" style="border-radius:50%;background:rgba(226,98,43,0.7)"></span>Hydrothermal vents feed deep-sea chemosynthesis</div>
+          <div class="item"><span class="swatch" style="border:1px solid var(--ember-dim);background:transparent"></span>Connective filaments join colony cells; glowing halo indicates multicellular organization</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- Client App Script -->
+<script src="app.js"></script>
+</body>
+</html>

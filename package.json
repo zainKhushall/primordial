@@ -1,0 +1,22 @@
+{
+  "name": "primordial-sea-neural",
+  "version": "2.0.0",
+  "description": "An early Earth artificial life observer simulation with evolvable neural networks, genetics, and multicellularity.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "keywords": [
+    "artificial-life",
+    "simulation",
+    "neural-network",
+    "evolution",
+    "multicellular",
+    "early-earth"
+  ],
+  "author": "Antigravity AI",
+  "license": "MIT"
+}
