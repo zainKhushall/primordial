@@ -1,10 +1,11 @@
 {
-  "name": "primordial-sea-neural-phase3",
-  "version": "3.0.0",
-  "description": "Phase 3 Early Earth Artificial Life Simulation with NEAT Brain Topology, Embryogenesis, Endosymbiosis, Geological Eras & Atmospheric Chemistry.",
+  "name": "primordial-earth-neural-phase4",
+  "version": "4.0.0",
+  "description": "Version 4 Primordial Earth Artificial Life Simulation with 4000x3000 Dual-Biome Continent, Stones/Mud/Ice Materials, Multi-Scale Infinite Zoom, Compound Raycast Vision, Amphibious Genetics & Hebbian Learning.",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node test_v4.js"
   },
   "dependencies": {
     "express": "^4.19.2"
@@ -13,10 +14,11 @@
     "artificial-life",
     "simulation",
     "neat-neural-network",
-    "embryogenesis",
-    "endosymbiosis",
-    "geological-eras",
-    "atmospheric-chemistry"
+    "hebbian-learning",
+    "compound-vision",
+    "amphibious-evolution",
+    "terrain-materials",
+    "infinite-zoom"
   ],
   "author": "Antigravity AI",
   "license": "MIT"

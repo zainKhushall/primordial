@@ -1,4 +1,4 @@
-// ===== Phase 3 Neural Engine: NEAT Evolvable Brain Topology with Dynamic Neurons =====
+// ===== Primordial V4 Cognitive Brain: NEAT Topology, Hebbian Neuroplasticity & Working Memory =====
 
 function tanh(x) { return Math.tanh(x); }
 function sigmoid(x) { return 1 / (1 + Math.exp(-x)); }
@@ -11,13 +11,13 @@ function gaussian() {
 function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 
 class NEATBrain {
-  constructor(inputSize = 10, initialHiddenSize = 8, outputSize = 6) {
+  constructor(inputSize = 16, initialHiddenSize = 10, outputSize = 7) {
     this.inputSize = inputSize;
     this.hiddenSize = initialHiddenSize;
-    this.maxHiddenSize = 16;
+    this.maxHiddenSize = 22;
     this.outputSize = outputSize;
 
-    // Weights matrices
+    // Synaptic weight matrices
     this.W1 = new Float32Array(this.maxHiddenSize * inputSize);
     this.B1 = new Float32Array(this.maxHiddenSize);
 
@@ -29,9 +29,15 @@ class NEATBrain {
     this.hidden = new Float32Array(this.maxHiddenSize);
     this.outputs = new Float32Array(outputSize);
 
-    // Recurrent Memory Feedback State
+    // Working Memory & Recurrent Leaky Traces
     this.mem1 = 0;
     this.mem2 = 0;
+    this.mem3 = 0;
+    this.painTrace = 0;
+
+    // Synaptic Plasticity Eligibility Traces
+    this.trace1 = new Float32Array(this.maxHiddenSize * inputSize);
+    this.trace2 = new Float32Array(outputSize * this.maxHiddenSize);
 
     this.randomize();
   }
@@ -44,11 +50,26 @@ class NEATBrain {
   }
 
   forward(environmentInputs) {
-    for (let i = 0; i < 8; i++) this.inputs[i] = environmentInputs[i] || 0;
-    this.inputs[8] = this.mem1;
-    this.inputs[9] = this.mem2;
+    const inCount = Math.min(environmentInputs.length, this.inputSize);
+    for (let i = 0; i < inCount; i++) {
+      this.inputs[i] = environmentInputs[i] || 0;
+    }
+    for (let i = inCount; i < this.inputSize; i++) {
+      this.inputs[i] = 0;
+    }
 
-    // Evaluate active hidden neurons
+    // Inject recurrent memory and pain traces into final input slots
+    if (this.inputSize >= 16) {
+      this.inputs[12] = this.mem1;
+      this.inputs[13] = this.mem2;
+      this.inputs[14] = this.mem3;
+      this.inputs[15] = this.painTrace;
+    } else if (this.inputSize >= 10) {
+      this.inputs[this.inputSize - 2] = this.mem1;
+      this.inputs[this.inputSize - 1] = this.mem2;
+    }
+
+    // Evaluate dynamic hidden neurons
     for (let h = 0; h < this.hiddenSize; h++) {
       let sum = this.B1[h];
       const rowOffset = h * this.inputSize;
@@ -58,51 +79,110 @@ class NEATBrain {
       this.hidden[h] = tanh(sum);
     }
 
-    // Evaluate outputs
+    // Evaluate action outputs
     for (let o = 0; o < this.outputSize; o++) {
       let sum = this.B2[o];
       const rowOffset = o * this.maxHiddenSize;
       for (let h = 0; h < this.hiddenSize; h++) {
         sum += this.W2[rowOffset + h] * this.hidden[h];
       }
-      if (o < 2 || o >= 4) {
-        this.outputs[o] = tanh(sum);
-      } else {
+      // Outputs 0 (thrust) & 1 (turn) use tanh [-1, 1]
+      // Outputs 2 (attack) & 3 (colony) use sigmoid [0, 1]
+      // Outputs 4, 5, 6 (memories) use tanh [-1, 1]
+      if (o === 2 || o === 3) {
         this.outputs[o] = sigmoid(sum);
+      } else {
+        this.outputs[o] = tanh(sum);
       }
     }
 
-    this.mem1 = this.outputs[4];
-    this.mem2 = this.outputs[5];
+    // Update recurrent memory nodes with decay
+    if (this.outputSize >= 6) {
+      this.mem1 = lerp(this.mem1, this.outputs[4], 0.7);
+      this.mem2 = lerp(this.mem2, this.outputs[5], 0.7);
+      if (this.outputSize >= 7) {
+        this.mem3 = lerp(this.mem3, this.outputs[6], 0.7);
+      }
+    }
+
+    // Decay pain trace
+    this.painTrace *= 0.88;
+
+    // Update eligibility traces for Hebbian learning
+    for (let h = 0; h < this.hiddenSize; h++) {
+      const rowOffset = h * this.inputSize;
+      const hAct = this.hidden[h];
+      for (let i = 0; i < this.inputSize; i++) {
+        const idx = rowOffset + i;
+        this.trace1[idx] = this.trace1[idx] * 0.8 + hAct * this.inputs[i];
+      }
+    }
+    for (let o = 0; o < this.outputSize; o++) {
+      const rowOffset = o * this.maxHiddenSize;
+      const oAct = this.outputs[o];
+      for (let h = 0; h < this.hiddenSize; h++) {
+        const idx = rowOffset + h;
+        this.trace2[idx] = this.trace2[idx] * 0.8 + oAct * this.hidden[h];
+      }
+    }
+
     return this.outputs;
   }
 
-  // NEAT Structural Mutation: Add new hidden neuron node
+  // --- Lifelong Neuroplasticity: Reward-Modulated Hebbian Learning ---
+  adaptPlasticity(reward, plasticityRate = 0.06) {
+    if (plasticityRate <= 0.001 || Math.abs(reward) < 0.005) return;
+    const lr = clamp(reward, -1.0, 1.0) * plasticityRate * 0.12;
+
+    // Weight decay factor to prevent runaway saturation
+    const decay = 0.9992;
+
+    for (let h = 0; h < this.hiddenSize; h++) {
+      const rowOffset = h * this.inputSize;
+      for (let i = 0; i < this.inputSize; i++) {
+        const idx = rowOffset + i;
+        this.W1[idx] = clamp(this.W1[idx] * decay + lr * this.trace1[idx], -3.8, 3.8);
+      }
+    }
+
+    for (let o = 0; o < this.outputSize; o++) {
+      const rowOffset = o * this.maxHiddenSize;
+      for (let h = 0; h < this.hiddenSize; h++) {
+        const idx = rowOffset + h;
+        this.W2[idx] = clamp(this.W2[idx] * decay + lr * this.trace2[idx], -3.8, 3.8);
+      }
+    }
+  }
+
+  registerPain(traumaAmount = 0.5) {
+    this.painTrace = clamp(this.painTrace + traumaAmount, 0, 1);
+  }
+
+  // --- Structural NEAT Mutation: Add dynamic hidden neuron node ---
   addNeuronMutation() {
     if (this.hiddenSize < this.maxHiddenSize) {
       const newH = this.hiddenSize;
       this.hiddenSize++;
-      // Initialize small connection weights for new neuron node
       const row1 = newH * this.inputSize;
-      for (let i = 0; i < this.inputSize; i++) this.W1[row1 + i] = gaussian() * 0.5;
+      for (let i = 0; i < this.inputSize; i++) {
+        this.W1[row1 + i] = gaussian() * 0.4;
+      }
       this.B1[newH] = 0;
 
       for (let o = 0; o < this.outputSize; o++) {
-        this.W2[o * this.maxHiddenSize + newH] = gaussian() * 0.5;
+        this.W2[o * this.maxHiddenSize + newH] = gaussian() * 0.4;
       }
     }
   }
 
   mutate(rate = 0.1) {
-    // 1. Structural mutations
-    if (Math.random() < rate * 0.25) this.addNeuronMutation();
+    if (Math.random() < rate * 0.3) this.addNeuronMutation();
 
-    // 2. Synaptic weight mutations
     const mutWeight = (w) => {
       if (Math.random() < rate) {
-        let delta = gaussian() * rate * 0.5;
-        if (Math.random() < 0.03) delta *= 3.0;
-        return clamp(w + delta, -3.5, 3.5);
+        let delta = gaussian() * rate * 0.55;
+        if (Math.random() < 0.04) delta *= 3.2;
+        return clamp(w + delta, -3.8, 3.8);
       }
       return w;
     };
@@ -111,27 +191,6 @@ class NEATBrain {
     for (let i = 0; i < this.B1.length; i++) this.B1[i] = mutWeight(this.B1[i]);
     for (let i = 0; i < this.W2.length; i++) this.W2[i] = mutWeight(this.W2[i]);
     for (let i = 0; i < this.B2.length; i++) this.B2[i] = mutWeight(this.B2[i]);
-  }
-
-  adaptPlasticity(reward, plasticityRate = 0.05) {
-    if (plasticityRate <= 0.001 || Math.abs(reward) < 0.01) return;
-    const lr = clamp(reward, -1, 1) * plasticityRate * 0.1;
-
-    for (let h = 0; h < this.hiddenSize; h++) {
-      const rowOffset = h * this.inputSize;
-      const hAct = this.hidden[h];
-      for (let i = 0; i < this.inputSize; i++) {
-        this.W1[rowOffset + i] = clamp(this.W1[rowOffset + i] + lr * hAct * this.inputs[i], -3.5, 3.5);
-      }
-    }
-
-    for (let o = 0; o < this.outputSize; o++) {
-      const rowOffset = o * this.maxHiddenSize;
-      const oAct = this.outputs[o];
-      for (let h = 0; h < this.hiddenSize; h++) {
-        this.W2[rowOffset + h] = clamp(this.W2[rowOffset + h] + lr * oAct * this.hidden[h], -3.5, 3.5);
-      }
-    }
   }
 
   crossover(otherBrain, mutRate = 0.1) {
@@ -151,15 +210,14 @@ class NEATBrain {
     const n = new NEATBrain(this.inputSize, this.hiddenSize, this.outputSize);
     n.hiddenSize = this.hiddenSize;
     n.W1.set(this.W1); n.B1.set(this.B1); n.W2.set(this.W2); n.B2.set(this.B2);
-    n.mem1 = this.mem1; n.mem2 = this.mem2;
+    n.mem1 = this.mem1; n.mem2 = this.mem2; n.mem3 = this.mem3;
+    n.painTrace = this.painTrace;
     return n;
   }
 
-  reset() { this.randomize(0.9); this.mem1 = 0; this.mem2 = 0; }
-
-  prune(threshold = 0.08) {
-    for (let i = 0; i < this.W1.length; i++) if (Math.abs(this.W1[i]) < threshold) this.W1[i] = 0;
-    for (let i = 0; i < this.W2.length; i++) if (Math.abs(this.W2[i]) < threshold) this.W2[i] = 0;
+  reset() {
+    this.randomize(0.85);
+    this.mem1 = 0; this.mem2 = 0; this.mem3 = 0; this.painTrace = 0;
   }
 
   toJSON() {
@@ -175,13 +233,15 @@ class NEATBrain {
   }
 
   fromJSON(data) {
-    this.hiddenSize = data.hiddenSize || 8;
+    this.hiddenSize = data.hiddenSize || 10;
     this.W1.set(data.W1);
     this.B1.set(data.B1);
     this.W2.set(data.W2);
     this.B2.set(data.B2);
   }
 }
+
+function lerp(a, b, t) { return a + (b - a) * t; }
 
 if (typeof module !== 'undefined') {
   module.exports = { NeuralNetwork: NEATBrain };

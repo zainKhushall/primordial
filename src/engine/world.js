@@ -1,11 +1,12 @@
-// ===== Phase 3 World Engine: Geological Eras, AI Ecosystem Naturalist & Selection =====
+// ===== Primordial V4 World Engine: Sprawling Continents, Amphibious Clades & Ecosystem Naturalist =====
 
 const { Organism } = require('./organism');
 const { FoodGrid } = require('./environment');
+const { TerrainGrid, TERRAIN_TYPES } = require('./terrain');
 const { mutateGenome, crossoverGenome, randomGenome, generateSpeciesName, hueDiff, dist2, clamp } = require('./genome');
 
 class SpatialHash {
-  constructor(width, height, cellSize = 40) {
+  constructor(width, height, cellSize = 60) {
     this.cellSize = cellSize;
     this.cols = Math.ceil(width / cellSize);
     this.rows = Math.ceil(height / cellSize);
@@ -43,9 +44,10 @@ class SpatialHash {
 
 class World {
   constructor(opts = {}) {
-    this.width = opts.width || 1000;
-    this.height = opts.height || 650;
-    this.food = new FoodGrid(this.width, this.height, opts.foodCell || 20);
+    this.width = opts.width || 4000;
+    this.height = opts.height || 3000;
+    this.terrain = opts.terrain || new TerrainGrid(this.width, this.height, 40);
+    this.food = new FoodGrid(this.width, this.height, opts.foodCell || 40, this.terrain);
     this.organisms = [];
     this.tickCount = 0;
     this.MULTICELLULAR_THRESHOLD = 7;
@@ -54,7 +56,7 @@ class World {
     this.fossilRecord = [];
 
     this.params = Object.assign({
-      foodGrowth: 0.011,
+      foodGrowth: 0.012,
       mutationRate: 0.1,
       tempFactor: 1.0,
       maxPopulation: 450,
@@ -64,6 +66,7 @@ class World {
     this.events = [];
     this.stats = {
       population: 0, species: 0, colonies: 0, multicellular: 0,
+      terrestrial: 0, amphibious: 0, avgMoisture: 100,
       avgSize: 0, avgSpeed: 0, herbivores: 0, carnivores: 0,
       foodCoverage: 0, maxGeneration: 1, topSpecies: 'None',
       era: 'Hadean Volcanic', o2: '5%', co2: '85%'
@@ -71,6 +74,8 @@ class World {
     this.history = [];
     this._extinctFor = 0;
     this._lastNaturalistReport = 0;
+    this._firstLandfall = false;
+    this._firstGlacial = false;
   }
 
   registerSpecies(speciesName, parentName, hue) {
@@ -87,21 +92,35 @@ class World {
     }
   }
 
-  seed(count = 60) {
+  seed(count = 70) {
     const ancestorGenome = {
-      size: 0.85, speed: 0.9, sense: 50, diet: 0.05,
+      size: 0.85, speed: 0.9, sense: 55, diet: 0.05,
       aggression: 0.08, colony: 0.15, membrane: 0.5,
-      plasticity: 0.4, pheromoneRate: 0.2, toxinGene: 0.1, endoCapacity: 0.5,
+      plasticity: 0.45, pheromoneRate: 0.2, toxinGene: 0.1, endoCapacity: 0.5,
+      moistureRetention: 0.15, locomotionType: 0.12, thermalTolerance: 0.4,
+      visionFov: 120, visionRange: 90,
       mutationRate: 0.1, hue: Math.random() * 360,
     };
     ancestorGenome.speciesName = generateSpeciesName(ancestorGenome);
     this.registerSpecies(ancestorGenome.speciesName, 'Abiogenesis', ancestorGenome.hue);
 
+    // Seed in oceanic or coastal zones
     for (let i = 0; i < count; i++) {
       const g = mutateGenome(ancestorGenome, 0.08);
       this.registerSpecies(g.speciesName, ancestorGenome.speciesName, g.hue);
-      const x = Math.random() * this.width;
-      const y = Math.random() * this.height;
+
+      // Find an aquatic or shallow location
+      let x = Math.random() * this.width;
+      let y = Math.random() * this.height;
+      for (let attempt = 0; attempt < 15; attempt++) {
+        const mat = this.terrain.getMaterial(x, y);
+        if (mat === TERRAIN_TYPES.WATER_DEEP || mat === TERRAIN_TYPES.WATER_SHALLOW || mat === TERRAIN_TYPES.MUD) {
+          break;
+        }
+        x = Math.random() * this.width;
+        y = Math.random() * this.height;
+      }
+
       this.organisms.push(new Organism(x, y, g, undefined, 1, undefined));
     }
   }
@@ -134,18 +153,31 @@ class World {
     const era = this.food.currentEra;
     let reportText = '';
 
-    if (this.tickCount === 1500) {
-      reportText = `[AI Naturalist] Great Archean Oxygenation Event begins! Oxygen levels rising.`;
-    } else if (this.tickCount === 3500) {
-      reportText = `[AI Naturalist] Proterozoic Snowball Earth era arrives! Ice sheets cover the photic surface.`;
-    } else if (this.tickCount === 5500) {
-      reportText = `[AI Naturalist] Cambrian Explosion! Optimal oxygenation sparks adaptive radiation.`;
-    } else if (s.multicellular > 2 && Math.random() < 0.5) {
-      reportText = `[AI Naturalist] Multicellular complexity surging: ${s.multicellular} organisms with spring tissue bodies active.`;
-    } else if (s.carnivores > s.herbivores && Math.random() < 0.5) {
-      reportText = `[AI Naturalist] Apex Predators dominant: Carnivores outweigh grazers in the ${era} era.`;
-    } else {
-      reportText = `[AI Naturalist] Species ${s.topSpecies} leads ecosystem diversity in ${era}.`;
+    if (!this._firstLandfall && s.terrestrial > 2) {
+      this._firstLandfall = true;
+      reportText = `[AI Naturalist] Major Evolutionary Leap: First amphibious creatures colonize the continental shores!`;
+    } else if (!this._firstGlacial && s.population > 20) {
+      const coldDwellers = this.organisms.filter(o => this.terrain.getMaterial(o.x, o.y) === TERRAIN_TYPES.ICE);
+      if (coldDwellers.length >= 2) {
+        this._firstGlacial = true;
+        reportText = `[AI Naturalist] Glacial Pioneers: Species colonize the northern ice sheet with antifreeze protein genes.`;
+      }
+    }
+
+    if (!reportText) {
+      if (this.tickCount === 1500) {
+        reportText = `[AI Naturalist] Great Archean Oxygenation Event begins! Oxygen levels rising.`;
+      } else if (this.tickCount === 3500) {
+        reportText = `[AI Naturalist] Proterozoic Snowball Earth era arrives! Glacial sheets expand across the continents.`;
+      } else if (this.tickCount === 5500) {
+        reportText = `[AI Naturalist] Cambrian Explosion! Optimal atmospheric oxygenation sparks rapid speciation.`;
+      } else if (s.multicellular > 2 && Math.random() < 0.5) {
+        reportText = `[AI Naturalist] Multicellular complexity surging: ${s.multicellular} organisms with spring tissue bodies active.`;
+      } else if (s.carnivores > s.herbivores && Math.random() < 0.5) {
+        reportText = `[AI Naturalist] Apex Predators dominant: Carnivores outweigh grazers in the ${era} era.`;
+      } else {
+        reportText = `[AI Naturalist] Species ${s.topSpecies} leads ecosystem diversity across land and sea.`;
+      }
     }
 
     this.events.push({ tick: this.tickCount, text: reportText });
@@ -157,13 +189,14 @@ class World {
 
     this.food.grow(p.foodGrowth, this.tickCount);
 
-    const hash = new SpatialHash(W, H, 40);
+    const hash = new SpatialHash(W, H, 60);
     const alive = [];
     for (let i = 0; i < this.organisms.length; i++) {
       const o = this.organisms[i];
       if (o.alive) { alive.push(o); hash.insert(o); }
     }
 
+    // Colony clustering (Union-Find)
     const parent = new Map();
     const find = (o) => {
       let r = o;
@@ -221,7 +254,10 @@ class World {
       }
     }
 
-    for (let i = 0; i < alive.length; i++) alive[i].step(this.food, hash, W, H, p.tempFactor);
+    // Step each organism with V4 terrain physics
+    for (let i = 0; i < alive.length; i++) {
+      alive[i].step(this.food, hash, W, H, p.tempFactor, this.terrain);
+    }
 
     const newborns = [];
     for (let i = 0; i < alive.length; i++) {
@@ -238,7 +274,7 @@ class World {
             age: o.age, kills: o.kills, offspringCount: o.offspringCount,
             generation: o.generation, genome: Object.assign({}, o.genome),
           });
-          if (this.fossilRecord.length > 25) this.fossilRecord.shift();
+          if (this.fossilRecord.length > 30) this.fossilRecord.shift();
         }
         continue;
       }
@@ -248,7 +284,7 @@ class World {
         let isSexual = false;
 
         if (Math.random() < p.sexualRatio) {
-          const neighbors = hash.query(o.x, o.y, 24);
+          const neighbors = hash.query(o.x, o.y, 28);
           for (let j = 0; j < neighbors.length; j++) {
             const partner = neighbors[j];
             if (partner === o || !partner.alive || partner.reproCooldown > 0) continue;
@@ -295,8 +331,8 @@ class World {
     if (this.organisms.length === 0) {
       this._extinctFor++;
       if (this._extinctFor > 80) {
-        this.seed(30);
-        this.events.push({ tick: this.tickCount, text: 'A fresh spark of abiogenesis ignites in the vents.' });
+        this.seed(35);
+        this.events.push({ tick: this.tickCount, text: 'A fresh spark of abiogenesis ignites in the hydrothermal vents.' });
         this._extinctFor = 0;
       }
     } else {
@@ -323,6 +359,7 @@ class World {
 
     if (orgs.length === 0) {
       s.species = 0; s.colonies = 0; s.multicellular = 0;
+      s.terrestrial = 0; s.amphibious = 0; s.avgMoisture = 100;
       s.avgSize = 0; s.avgSpeed = 0; s.herbivores = 0; s.carnivores = 0;
       s.foodCoverage = this.food.coverage();
       s.topSpecies = 'None';
@@ -330,6 +367,7 @@ class World {
     }
 
     let sumSize = 0, sumSpeed = 0, herb = 0, carn = 0, maxGen = 1;
+    let terrestrial = 0, amphibious = 0, sumMoisture = 0;
     const hues = [];
     const seenGroups = new Set();
     let colonies = 0, multicell = 0;
@@ -338,6 +376,16 @@ class World {
       const o = orgs[i];
       sumSize += o.genome.size;
       sumSpeed += o.genome.speed;
+      sumMoisture += o.moisture;
+
+      const mat = this.terrain.getMaterial(o.x, o.y);
+      if (mat === TERRAIN_TYPES.LAND || mat === TERRAIN_TYPES.MUD) {
+        if ((o.genome.locomotionType || 0) > 0.45) terrestrial++;
+      }
+      if ((o.genome.locomotionType || 0) > 0.35 && (o.genome.moistureRetention || 0) > 0.35) {
+        amphibious++;
+      }
+
       if (o.genome.diet > 0.32) carn++; else herb++;
       if (o.generation > maxGen) maxGen = o.generation;
       hues.push(o.genome.hue);
@@ -372,6 +420,9 @@ class World {
     s.species = speciesClusters;
     s.colonies = colonies;
     s.multicellular = multicell;
+    s.terrestrial = terrestrial;
+    s.amphibious = amphibious;
+    s.avgMoisture = Math.round(sumMoisture / orgs.length);
     s.avgSize = sumSize / orgs.length;
     s.avgSpeed = sumSpeed / orgs.length;
     s.herbivores = herb;

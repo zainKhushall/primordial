@@ -1,4 +1,4 @@
-// ===== Phase 3 Genome Module: Embryogenesis Body Plan Genes, Toxin Genes & Taxonomy =====
+// ===== Primordial V4 Genome Module: Amphibious Genes, Locomotion, Vision & Taxonomy =====
 
 const GENE_RANGES = {
   size: [0.4, 3.2],
@@ -10,8 +10,13 @@ const GENE_RANGES = {
   membrane: [0.2, 1.0],
   plasticity: [0, 1],
   pheromoneRate: [0, 1],
-  toxinGene: [0, 1],       // Venom secretion / poison defense gene
-  endoCapacity: [0, 1],    // Endosymbiont organelle host capacity
+  toxinGene: [0, 1],          // Venom secretion / poison defense gene
+  endoCapacity: [0, 1],       // Endosymbiont organelle host capacity
+  moistureRetention: [0, 1],  // Cuticle & mucous barrier against terrestrial desiccation
+  locomotionType: [0, 1],     // 0 = Aquatic swimming fin, 1 = Terrestrial crawling limb
+  thermalTolerance: [0, 1],   // Antifreeze protein synthesis / cold & heat shock resilience
+  visionFov: [45, 240],       // Compound eye field of view (degrees)
+  visionRange: [40, 220],     // Compound eye ray distance (px)
   mutationRate: [0.02, 0.35],
 };
 
@@ -27,6 +32,11 @@ const GENE_LABELS = {
   pheromoneRate: 'Pheromone Signal',
   toxinGene: 'Toxin Secretion',
   endoCapacity: 'Endosymbiosis Host',
+  moistureRetention: 'Moisture Cuticle',
+  locomotionType: 'Crawl vs Swim',
+  thermalTolerance: 'Thermal Resilience',
+  visionFov: 'Vision Field of View',
+  visionRange: 'Eye Sight Distance',
   mutationRate: 'Genetic Instability',
 };
 
@@ -51,11 +61,23 @@ function hueDiff(a, b) {
 }
 
 function generateSpeciesName(genome) {
-  const prefixes = ['Phyto', 'Micro', 'Velox', 'Macro', 'Colonio', 'Carnis', 'Toxic', 'Abysso', 'Pelag', 'Endo'];
-  const suffixes = ['morphic', 'bion', 'vorus', 'dermal', 'spire', 'plax', 'cyte', 'naut', 'stoma', 'troph'];
+  const prefixes = [
+    'Phyto', 'Micro', 'Velox', 'Macro', 'Colonio',
+    'Carnis', 'Toxic', 'Abysso', 'Pelag', 'Endo',
+    'Amphi', 'Terro', 'Cryo', 'Oculo'
+  ];
+  const suffixes = [
+    'morphic', 'bion', 'vorus', 'dermal', 'spire',
+    'plax', 'cyte', 'naut', 'stoma', 'troph',
+    'poda', 'cutis', 'chitin', 'ops'
+  ];
 
   let pIndex = 0;
-  if (genome.toxinGene > 0.45) pIndex = 6; // Toxic
+  if (genome.locomotionType > 0.65 && genome.moistureRetention > 0.45) pIndex = 11; // Terro
+  else if (genome.locomotionType > 0.45 && genome.moistureRetention > 0.35) pIndex = 10; // Amphi
+  else if (genome.thermalTolerance > 0.65) pIndex = 12; // Cryo
+  else if (genome.visionRange > 160) pIndex = 13; // Oculo
+  else if (genome.toxinGene > 0.45) pIndex = 6; // Toxic
   else if (genome.diet > 0.4) pIndex = 5; // Carnis
   else if (genome.colony > 0.5) pIndex = 4; // Colonio
   else if (genome.speed > 1.6) pIndex = 2; // Velox
@@ -63,6 +85,9 @@ function generateSpeciesName(genome) {
   else pIndex = 0;
 
   let sIndex = Math.floor((genome.hue / 360) * suffixes.length) % suffixes.length;
+  if (genome.locomotionType > 0.6) sIndex = 10; // -poda
+  else if (genome.moistureRetention > 0.7) sIndex = 11; // -cutis
+
   return `${prefixes[pIndex]}-${suffixes[sIndex]}`;
 }
 
@@ -89,7 +114,7 @@ function mutateGenome(genome, mutRate) {
   }
   const oldHue = g.hue;
   g.hue = (g.hue + gaussian() * rate * 35 + 360) % 360;
-  if (Math.abs(g.hue - oldHue) > 30 || Math.random() < 0.08) g.speciesName = generateSpeciesName(g);
+  if (Math.abs(g.hue - oldHue) > 28 || Math.random() < 0.08) g.speciesName = generateSpeciesName(g);
   else g.speciesName = genome.speciesName || generateSpeciesName(g);
   return g;
 }
