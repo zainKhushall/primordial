@@ -1,4 +1,4 @@
-// ===== Genome Module: Trait Definitions, Mutations & Sexual Crossover =====
+// ===== Phase 2 Genome Module: Trait Definitions, Taxonomy & Sexual Crossover =====
 
 const GENE_RANGES = {
   size: [0.4, 3.2],
@@ -9,6 +9,7 @@ const GENE_RANGES = {
   colony: [0, 1],
   membrane: [0.2, 1.0],
   plasticity: [0, 1],
+  pheromoneRate: [0, 1],
   mutationRate: [0.02, 0.35],
 };
 
@@ -21,6 +22,7 @@ const GENE_LABELS = {
   colony: 'Colony Adhesion',
   membrane: 'Membrane Shield',
   plasticity: 'Brain Plasticity',
+  pheromoneRate: 'Pheromone Signal',
   mutationRate: 'Genetic Instability',
 };
 
@@ -44,6 +46,22 @@ function hueDiff(a, b) {
   return d > 180 ? 360 - d : d;
 }
 
+// Generate binomial species nomenclature (e.g. "Phyto-microbia", "Velox-carnis")
+function generateSpeciesName(genome) {
+  const prefixes = ['Phyto', 'Micro', 'Velox', 'Macro', 'Colonio', 'Carnis', 'Abysso', 'Pelag', 'Soma', 'Bio'];
+  const suffixes = ['morphic', 'bion', 'vorus', 'dermal', 'spire', 'plax', 'cyte', 'naut', 'stoma', 'troph'];
+
+  let pIndex = 0;
+  if (genome.diet > 0.4) pIndex = 5; // Carnis
+  else if (genome.colony > 0.5) pIndex = 4; // Colonio
+  else if (genome.speed > 1.6) pIndex = 2; // Velox
+  else if (genome.size > 2.0) pIndex = 3; // Macro
+  else pIndex = 0; // Phyto
+
+  let sIndex = Math.floor((genome.hue / 360) * suffixes.length) % suffixes.length;
+  return `${prefixes[pIndex]}-${suffixes[sIndex]}`;
+}
+
 function randomGenome(base) {
   const g = {};
   for (const k in GENE_RANGES) {
@@ -51,6 +69,7 @@ function randomGenome(base) {
     g[k] = base && base[k] !== undefined ? base[k] : lerp(lo, hi, Math.random());
   }
   g.hue = base && base.hue !== undefined ? base.hue : Math.random() * 360;
+  g.speciesName = generateSpeciesName(g);
   return g;
 }
 
@@ -61,33 +80,53 @@ function mutateGenome(genome, mutRate) {
     const [lo, hi] = GENE_RANGES[k];
     const width = hi - lo;
     let delta = gaussian() * rate * width * 0.18;
-    if (Math.random() < 0.05) delta *= 3.5; // macro-mutation
+    if (Math.random() < 0.05) delta *= 3.5;
     g[k] = clamp(g[k] + delta, lo, hi);
   }
+  const oldHue = g.hue;
   g.hue = (g.hue + gaussian() * rate * 35 + 360) % 360;
+
+  // Re-evaluate species name if significant drift occurred
+  if (Math.abs(g.hue - oldHue) > 30 || Math.random() < 0.08) {
+    g.speciesName = generateSpeciesName(g);
+  } else {
+    g.speciesName = genome.speciesName || generateSpeciesName(g);
+  }
   return g;
 }
 
-// Sexual reproduction: recombining genes of two parent genomes
 function crossoverGenome(parentA, parentB, mutRate) {
   const child = {};
   for (const k in GENE_RANGES) {
-    // 50% coin flip or blend
-    if (Math.random() < 0.5) {
-      child[k] = parentA[k];
-    } else if (Math.random() < 0.8) {
-      child[k] = parentB[k];
-    } else {
-      child[k] = lerp(parentA[k], parentB[k], 0.5);
-    }
+    if (Math.random() < 0.5) child[k] = parentA[k];
+    else if (Math.random() < 0.8) child[k] = parentB[k];
+    else child[k] = lerp(parentA[k], parentB[k], 0.5);
   }
-  // Hue blending or dominance
   child.hue = Math.random() < 0.5 ? parentA.hue : parentB.hue;
-  if (Math.abs(parentA.hue - parentB.hue) < 40) {
-    child.hue = lerp(parentA.hue, parentB.hue, 0.5);
-  }
+  if (Math.abs(parentA.hue - parentB.hue) < 40) child.hue = lerp(parentA.hue, parentB.hue, 0.5);
   const effectiveMutRate = mutRate !== undefined ? mutRate : (parentA.mutationRate + parentB.mutationRate) * 0.5;
+  child.speciesName = generateSpeciesName(child);
   return mutateGenome(child, effectiveMutRate);
+}
+
+function exportGenomeJSON(genome) {
+  return JSON.stringify(genome, null, 2);
+}
+
+function importGenomeJSON(jsonString) {
+  try {
+    const g = JSON.parse(jsonString);
+    for (const k in GENE_RANGES) {
+      const [lo, hi] = GENE_RANGES[k];
+      if (g[k] === undefined) g[k] = lerp(lo, hi, 0.5);
+      else g[k] = clamp(g[k], lo, hi);
+    }
+    if (g.hue === undefined) g.hue = Math.random() * 360;
+    if (!g.speciesName) g.speciesName = generateSpeciesName(g);
+    return g;
+  } catch (err) {
+    return null;
+  }
 }
 
 if (typeof module !== 'undefined') {
@@ -99,8 +138,11 @@ if (typeof module !== 'undefined') {
     gaussian,
     dist2,
     hueDiff,
+    generateSpeciesName,
     randomGenome,
     mutateGenome,
     crossoverGenome,
+    exportGenomeJSON,
+    importGenomeJSON,
   };
 }

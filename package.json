@@ -1,7 +1,7 @@
 {
-  "name": "primordial-sea-neural",
+  "name": "primordial-sea-neural-phase2",
   "version": "2.0.0",
-  "description": "An early Earth artificial life observer simulation with evolvable neural networks, genetics, and multicellularity.",
+  "description": "Phase 2 Early Earth Artificial Life Simulation with Recurrent Neural Memory, Physical Multicellular Morphologies & Phylogenetic Clade Trees.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -12,10 +12,10 @@
   "keywords": [
     "artificial-life",
     "simulation",
-    "neural-network",
+    "recurrent-neural-network",
     "evolution",
     "multicellular",
-    "early-earth"
+    "phylogenetics"
   ],
   "author": "Antigravity AI",
   "license": "MIT"
